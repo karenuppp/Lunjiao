@@ -1,0 +1,52 @@
+{
+  "6785d77f408edc07": {
+    "content": "# macos快捷操作\n切换输入法：command+space\n打开utools：option+space\n最小化：command+h\n关闭窗口：command+w\n退出应用：command+q\n显示桌面：五指张开或command+f2\n复制：command+c\n粘贴：command+v\n粘贴（剪切）：command+option+v\n调整窗口：fn+r\n切换到左边Desktop：fn+a\n切换到右边Desktop：fn+b",
+    "full_doc_id": "a4707efb47d64467",
+    "tokens": 14,
+    "chunk_order_index": 0,
+    "file_path": "",
+    "llm_cache_list": [],
+    "update_time": 1777714855,
+    "_id": "6785d77f408edc07"
+  },
+  "2da647ebdf4e5c1f": {
+    "content": "lock+字母 等于 control+字母\n快速单击lock 等于 esc\nshift+退格 等于 del",
+    "full_doc_id": "a4707efb47d64467",
+    "tokens": 9,
+    "chunk_order_index": 1,
+    "file_path": "",
+    "llm_cache_list": [],
+    "update_time": 1777714855,
+    "_id": "2da647ebdf4e5c1f"
+  },
+  "012abdce00b6e915": {
+    "content": "# macOS Shortcuts",
+    "full_doc_id": "03cc5cc21462d5db",
+    "tokens": 3,
+    "chunk_order_index": 0,
+    "file_path": "",
+    "llm_cache_list": [],
+    "update_time": 1777719644,
+    "_id": "012abdce00b6e915"
+  },
+  "6283f6b46f7d7e5e": {
+    "content": "- Switch Input: Cmd+Space\n- Quit App: Cmd+Q",
+    "full_doc_id": "03cc5cc21462d5db",
+    "tokens": 8,
+    "chunk_order_index": 1,
+    "file_path": "",
+    "llm_cache_list": [],
+    "update_time": 1777719644,
+    "_id": "6283f6b46f7d7e5e"
+  },
+  "d73b3e7070100da5": {
+    "content": "=== Sheet: Sheet1 ===\n姓名 | 获奖时间 | 奖项\n张三 | 2025-10-01 00:00:00 | 一等奖\n李四 | 2026-02-15 00:00:00 | 三等奖\n张三 | 2023-05-02 00:00:00 | 二等奖\n王五 | 2021-07-01 00:00:00 | 二等奖\n |  | \n |  |",
+    "full_doc_id": "d044b140b2811564",
+    "tokens": 37,
+    "chunk_order_index": 0,
+    "file_path": "",
+    "llm_cache_list": [],
+    "update_time": 1777730673,
+    "_id": "d73b3e7070100da5"
+  }
+}

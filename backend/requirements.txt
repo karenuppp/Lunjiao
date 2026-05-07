@@ -1,0 +1,34 @@
+# Core
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.19
+pydantic==2.10.4
+
+# AI / LLM
+openai>=1.60.0
+
+# MCP
+mcp==1.3.0
+
+# Data processing
+pandas==2.2.3
+numpy>=1.26.4,<2
+sqlalchemy==2.0.36
+pymysql==1.1.1
+
+# Visualization
+matplotlib==3.10.0
+plotly==5.24.1
+
+# File handling
+openpyxl==3.1.5
+python-docx==1.1.2
+tabulate==0.9.0
+
+# RAG
+raganything>=1.2.10
+
+# Utils
+python-dotenv==1.0.1
+aiofiles==24.1.0
+httpx==0.28.1
