@@ -118,13 +118,14 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
     return rebuilt
 
 
-async def _index_file_local(file_id: str, file_path: str, file_name: str, category: str) -> tuple[str, int]:
+async def _index_file_local(file_id: str, file_path: str, file_name: str, category: str, user_id: str = "default") -> tuple[str, int]:
     """Index the uploaded file using RAGAnything (async)."""
     try:
         doc_id = await rag.index_file(
             file_path=file_path,
             file_name=file_name,
             category=category,
+            user_id=user_id,
         )
         if not doc_id:
             return "failed", 0
@@ -151,6 +152,7 @@ async def _process_single_file(
     category: str,
     upload_dir: Path,
     allowed_extensions: list[str],
+    user_id: str = "default",
 ) -> UploadResponse:
     """Save a single file to disk, write .meta, trigger async RAG indexing, and return response."""
     ext = _validate_file_type(filename, allowed_extensions)
@@ -186,7 +188,7 @@ async def _process_single_file(
 
     # Trigger async RAG indexing
     rag_task = asyncio.create_task(
-        _index_file_local(file_id, str(save_path), filename, category)
+        _index_file_local(file_id, str(save_path), filename, category, user_id)
     )
 
     response = UploadResponse(
@@ -215,8 +217,13 @@ async def _process_single_file(
 async def upload_file(
     file: UploadFile = File(...),
     category: str = Form("上传文件"),
+    user_id: str = Form("default"),
 ):
-    """Upload a file. Accepts any format -- will be parsed and indexed by RAGAnything."""
+    """Upload a file. Accepts any format -- will be parsed and indexed by RAGAnything.
+
+    Args:
+        user_id: User identifier for knowledge base isolation (default "default").
+    """
     if not file.filename:
         raise HTTPException(400, "No file provided")
 
@@ -227,15 +234,20 @@ async def upload_file(
         ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".csv", ".txt", ".md", ".png", ".jpg", ".jpeg"
     ]
 
-    return await _process_single_file(content, file.filename, category, upload_dir, allowed)
+    return await _process_single_file(content, file.filename, category, upload_dir, allowed, user_id)
 
 
 @router.post("/batch")
 async def upload_files_batch(
     files: list[UploadFile] = File(...),
     category: str = Form("上传文件"),
+    user_id: str = Form("default"),
 ):
-    """Upload multiple files at once. No limit on number of files."""
+    """Upload multiple files at once. No limit on number of files.
+
+    Args:
+        user_id: User identifier for knowledge base isolation (default "default").
+    """
     if not files:
         raise HTTPException(400, "No files provided")
 
@@ -253,7 +265,7 @@ async def upload_files_batch(
             continue
         try:
             content = await file.read()
-            resp = await _process_single_file(content, file.filename, category, upload_dir, allowed)
+            resp = await _process_single_file(content, file.filename, category, upload_dir, allowed, user_id)
             results.append(resp)
         except HTTPException as e:
             errors.append({"filename": file.filename, "error": e.detail})
@@ -280,17 +292,17 @@ async def list_uploaded_files():
 
 
 @router.get("/stats")
-async def rag_stats():
-    """Get RAG engine statistics."""
+async def rag_stats(user_id: str = "default"):
+    """Get RAG engine statistics for a specific user."""
     try:
-        stats = await rag.stats()
+        stats = await rag.stats(user_id=user_id)
         return stats or {"message": "RAG not yet initialized"}
     except Exception as e:
         return {"message": f"Stats not available: {str(e)}"}
 
 
 @router.delete("/files/{file_id}")
-async def delete_uploaded_file(file_id: str):
+async def delete_uploaded_file(file_id: str, user_id: str = "default"):
     """Delete an uploaded file and remove from RAG index."""
     upload_dir = Path(settings.upload_dir)
 
@@ -312,7 +324,7 @@ async def delete_uploaded_file(file_id: str):
         raise HTTPException(404, f"File {file_id} not found")
 
     # Remove from RAG index
-    await rag.remove_file(file_id)
+    await rag.remove_file(file_id, user_id=user_id)
 
     # Also clean up in-memory cache
     if file_id in _indexed_files:

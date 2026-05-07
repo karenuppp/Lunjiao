@@ -97,22 +97,28 @@ def _create_embedding_func():
 class RAGEngineAdapter:
     """Adapter wrapping RAGAnything for the Lunjiao project.
 
+    Each user gets an isolated RAG instance with independent workspace and vector storage.
     Provides a simple async interface for indexing files, searching, and stats.
     """
 
     def __init__(self):
-        self._rag = None
-        self._initialized = False
+        """Initialize with an empty user→RAG instance map."""
+        self._rags: dict[str, object] = {}
 
-    async def init(self):
-        """Initialize the RAGAnything instance (lazy, one-time)."""
-        if self._initialized:
+    async def _init_user_rag(self, user_id: str):
+        """Lazily create a per-user RAG instance with isolated storage.
+
+        Each user gets their own working_dir and LightRAG workspace, ensuring
+        complete data isolation at the vector/knowledge-graph level.
+        """
+        if user_id in self._rags:
             return
 
         from raganything import RAGAnything, RAGAnythingConfig
 
-        working_dir = os.path.join(settings.upload_dir, ".rag_storage")
-        parser_output_dir = os.path.join(settings.upload_dir, ".rag_parse_output")
+        base_dir = os.path.join(settings.upload_dir, ".rag_storage")
+        working_dir = os.path.join(base_dir, user_id)
+        parser_output_dir = os.path.join(settings.upload_dir, ".rag_parse_output", user_id)
         os.makedirs(working_dir, exist_ok=True)
         os.makedirs(parser_output_dir, exist_ok=True)
 
@@ -120,35 +126,39 @@ class RAGEngineAdapter:
             working_dir=working_dir,
             parser_output_dir=parser_output_dir,
             parser="mineru",
-            parse_method="txt",  # text mode: no PDF conversion, no MinerU, just plain text parsing
+            parse_method="txt",
             enable_image_processing=False,
             enable_table_processing=False,
             enable_equation_processing=False,
             max_concurrent_files=1,
             use_full_path=True,
+            lightrag_kwargs={
+                "workspace": user_id,  # LightRAG data isolation key
+            },
         )
 
-        self._rag = RAGAnything(
+        rag = RAGAnything(
             config=config,
             llm_model_func=_create_llm_model_func(),
             embedding_func=_create_embedding_func(),
         )
 
-        # Ensure LightRAG is initialized internally
-        await self._rag._ensure_lightrag_initialized()
-        self._initialized = True
+        # Initialize the underlying LightRAG engine
+        await rag._ensure_lightrag_initialized()
+        self._rags[user_id] = rag
 
-    async def ensure_ready(self):
-        """Ensure the engine is initialized before use."""
-        if not self._initialized:
-            await self.init()
+    async def _ensure_ready(self, user_id: str):
+        """Ensure the per-user RAG instance is initialized before use."""
+        if user_id not in self._rags:
+            await self._init_user_rag(user_id)
 
     # ---- File Indexing ----
 
     async def index_file(
-        self, file_path: str, file_name: str | None = None, category: str = "上传文件"
+        self, file_path: str, file_name: str | None = None,
+        category: str = "上传文件", user_id: str = "default"
     ) -> str:
-        """Index a file into the RAG knowledge base.
+        """Index a file into the RAG knowledge base for a specific user.
 
         For plain text files (txt, md), inserts directly into LightRAG
         to bypass the slow MinerU PDF pipeline. For all other formats,
@@ -156,7 +166,8 @@ class RAGEngineAdapter:
 
         Returns the doc_id string on success, or empty string on failure.
         """
-        await self.ensure_ready()
+        await self._ensure_ready(user_id)
+        user_rag = self._rags[user_id]
 
         import hashlib
         doc_id = hashlib.md5(str(file_path).encode()).hexdigest()[:16]
@@ -203,7 +214,7 @@ class RAGEngineAdapter:
 
         if text_content is not None:
             # Direct chunk upsert into LightRAG (skips LLM entity extraction entirely)
-            lightrag = self._rag.lightrag
+            lightrag = user_rag.lightrag
             paragraphs = [p.strip() for p in text_content.split('\n\n') if p.strip()]
             text_chunks = []
             for para in paragraphs:
@@ -244,7 +255,7 @@ class RAGEngineAdapter:
         else:
             # For complex formats (PDF, DOCX, etc.), use RAGAnything's pipeline
             try:
-                await self._rag.process_document_complete(
+                await user_rag.process_document_complete(
                     file_path=file_path,
                     file_name=file_name or Path(file_path).name,
                     doc_id=f"{category}::{doc_id}",
@@ -253,22 +264,23 @@ class RAGEngineAdapter:
                 print(f"[RAG-Anything] Error indexing {file_path}: {e}")
                 return ""
 
-        # Store mapping in-memory (file_name -> doc_id)
-        _doc_id_map[file_name or Path(file_path).name] = f"{category}::{doc_id}"
+        # Store mapping in-memory (keyed by user_id + file_name)
+        _doc_id_map[f"{user_id}:{file_name or Path(file_path).name}"] = f"{category}::{doc_id}"
         return doc_id
 
     # ---- Search ----
 
     async def search(
-        self, query_text: str, category: str | None = None, top_k: int = 3
+        self, query_text: str, category: str | None = None, top_k: int = 3,
+        user_id: str = "default"
     ) -> list[dict]:
-        """Search indexed documents by semantic similarity.
+        """Search indexed documents by semantic similarity for a specific user.
 
         Uses LightRAG's naive mode (vector-only, no KG entity extraction) for
         speed. Returns raw text chunks as dicts for the agent to consume.
         """
-        await self.ensure_ready()
-        lightrag = self._rag.lightrag
+        await self._ensure_ready(user_id)
+        lightrag = self._rags[user_id].lightrag
 
         try:
             # Build a QueryParam with speed-optimized defaults:
@@ -332,22 +344,23 @@ class RAGEngineAdapter:
         return results
 
     async def search_text(
-        self, query_text: str, category: str | None = None, top_k: int = 5
+        self, query_text: str, category: str | None = None, top_k: int = 5,
+        user_id: str = "default"
     ) -> list[dict]:
         """Fallback keyword search (passthrough to same engine)."""
-        return await self.search(query_text, category=category, top_k=top_k)
+        return await self.search(query_text, category=category, top_k=top_k, user_id=user_id)
 
     # ---- Stats ----
 
-    async def stats(self) -> dict:
-        """Get RAG index statistics."""
-        await self.ensure_ready()
-        return self._rag.get_config_info() if self._rag else {}
+    async def stats(self, user_id: str = "default") -> dict:
+        """Get RAG index statistics for a specific user."""
+        await self._ensure_ready(user_id)
+        return self._rags[user_id].get_config_info() if user_id in self._rags else {}
 
-    async def remove_file(self, doc_id: str) -> bool:
+    async def remove_file(self, doc_id: str, user_id: str = "default") -> bool:
         """Remove a file from the RAG index. Not directly supported by RAGAnything,
         but we track by doc_id for future use."""
-        await self.ensure_ready()
+        await self._ensure_ready(user_id)
         # RAGAnything doesn't expose a direct remove API through its public interface.
         # We log it for now.
         print(f"[RAG-Anything] File removal requested for {doc_id} (not yet implemented)")
@@ -357,5 +370,5 @@ class RAGEngineAdapter:
 # Singleton
 rag = RAGEngineAdapter()
 
-# In-memory doc_id mapping (file_name -> doc_id)
+# In-memory doc_id mapping, keyed by (user_id, file_name) -> doc_id
 _doc_id_map: dict[str, str] = {}

@@ -139,6 +139,7 @@ async def _run_react_loop(
     messages: list[ChatCompletionMessageParam],
     model: str | None = None,
     max_tool_rounds: int = 5,
+    user_id: str = "default",
 ) -> tuple[str, list[str]]:
     """Run a manual ReAct loop using OpenAI tool-calling.
 
@@ -187,7 +188,7 @@ async def _run_react_loop(
                 data_sources.add("数据库查询")
 
             # Execute
-            result = await execute_tool(func_name, **args)
+            result = await execute_tool(func_name, user_id=user_id, **args)
 
             # Append assistant message with tool call
             assistant_msg: dict = {
@@ -221,13 +222,13 @@ async def _run_react_loop(
 # Sync API — for non-streaming requests
 # ============================================================
 
-def run_agent_sync(question: str, history: List[dict] | None = None) -> dict:
+def run_agent_sync(question: str, history: List[dict] | None = None, user_id: str = "default") -> dict:
     """Run the agent synchronously and return structured result."""
     import asyncio
 
     async def _run():
         messages = _build_messages(question, history)
-        answer, data_sources_used = await _run_react_loop(messages)
+        answer, data_sources_used = await _run_react_loop(messages, user_id=user_id)
         return {
             "answer": answer,
             "data_sources_used": data_sources_used,
@@ -246,7 +247,7 @@ def format_sse_event(event_type: str, data: Any) -> str:
 
 
 async def run_agent_stream_simple(
-    question: str, history: List[dict] | None = None
+    question: str, history: List[dict] | None = None, user_id: str = "default"
 ) -> AsyncIterator[str]:
     """Run the agent with SSE streaming output.
 
@@ -347,7 +348,7 @@ async def run_agent_stream_simple(
                 })
 
                 # Execute
-                result = await execute_tool(func_name, **args)
+                result = await execute_tool(func_name, user_id=user_id, **args)
 
                 yield format_sse_event("tool_call_end", {
                     "tool": func_name,

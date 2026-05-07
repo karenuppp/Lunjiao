@@ -21,8 +21,8 @@ from app.rag_engine import rag
 # Tool 1: query_rag -- Local RAG document search
 # ============================================================
 
-async def query_rag(query_text: str, category: str = "", top_k: int = 5) -> str:
-    """Search uploaded documents via the local RAG engine.
+async def query_rag(query_text: str, category: str = "", top_k: int = 5, user_id: str = "default") -> str:
+    """Search uploaded documents via the local RAG engine (user-isolated).
 
     Use this when the user's question relates to content in uploaded files (PDF, Word, Excel, etc.).
     The system has already indexed all uploaded documents; just pass the question as query_text.
@@ -35,6 +35,7 @@ async def query_rag(query_text: str, category: str = "", top_k: int = 5) -> str:
         category: Optional category filter (e.g., "上传文件" to search only uploaded documents,
                   "设备" for equipment docs, "人事" for personnel docs). Empty string = all categories.
         top_k: Number of relevant document chunks to return (default 5)
+        user_id: The user identifier for data isolation (server-injected, not exposed to LLM)
 
     Returns:
         A formatted string with retrieved document snippets and their sources.
@@ -42,12 +43,12 @@ async def query_rag(query_text: str, category: str = "", top_k: int = 5) -> str:
     category_param = category if category else None
 
     try:
-        results = await rag.search(query_text, category=category_param, top_k=top_k)
+        results = await rag.search(query_text, category=category_param, top_k=top_k, user_id=user_id)
         has_results = bool(results)
 
         # Fallback to keyword search if semantic search returned nothing
         if not results:
-            results = await rag.search_text(query_text, category=category_param, top_k=top_k)
+            results = await rag.search_text(query_text, category=category_param, top_k=top_k, user_id=user_id)
 
         if not results:
             if category:
@@ -241,13 +242,14 @@ def get_schemas() -> list[dict]:
     return TOOL_SCHEMAS
 
 
-async def execute_tool(name: str, **kwargs) -> str:
+async def execute_tool(name: str, user_id: str = "default", **kwargs) -> str:
     """Execute a tool function by name with given arguments.
 
     All tool functions are async.
 
     Args:
         name: Tool function name (key in TOOL_FUNCTIONS)
+        user_id: User identifier for data isolation (server-injected)
         **kwargs: Arguments to pass to the tool function
 
     Returns:
@@ -258,6 +260,9 @@ async def execute_tool(name: str, **kwargs) -> str:
         return f"[Unknown tool: {name}]"
 
     try:
+        # Inject user_id into tool calls that need it (currently only query_rag)
+        if name == "query_rag":
+            kwargs["user_id"] = user_id
         result = await func(**kwargs)
         return result
     except Exception as e:

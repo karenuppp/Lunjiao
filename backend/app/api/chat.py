@@ -18,6 +18,7 @@ class ChatRequest(BaseModel):
     data_sources: Optional[List[str]] = None
     response_mode: Optional[str] = "all"  # "text" | "chart" | "all"
     history: Optional[List[Dict[str, str]]] = None
+    user_id: Optional[str] = None  # User identifier for knowledge base isolation
 
 
 class ChatResponse(BaseModel):
@@ -69,10 +70,12 @@ async def chat(request: ChatRequest):
         for msg in request.history:
             agent_history.append(msg)
 
-    # Call agent
+    # Call agent (default to "default" if user_id not provided for backward compat)
+    user_id = request.user_id or "default"
     result = run_agent_sync(
         question=request.message,
         history=agent_history or None,
+        user_id=user_id,
     )
 
     # Store conversation
@@ -118,9 +121,11 @@ async def chat_stream(request: ChatRequest):
             for msg in request.history:
                 agent_history.append(msg)
 
+        user_id = request.user_id or "default"
         async for event_line in run_agent_stream_simple(
             question=request.message,
             history=agent_history or None,
+            user_id=user_id,
         ):
             yield event_line
 
