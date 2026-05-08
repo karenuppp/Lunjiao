@@ -342,6 +342,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           message,
           conversation_id: convId,
           history: undefined, // backend handles history internally for now
+          user_id: localStorage.getItem('lunjiao_user_id') || 'default',
         },
         (eventType, data) => {
           switch (eventType) {
@@ -398,10 +399,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   )
 
   // ---- Upload file ----
-  const uploadFile = useCallback(async (file: File): Promise<UploadedFileMeta | null> => {
+  const uploadFile = useCallback(async (file: File, userId?: string): Promise<UploadedFileMeta | null> => {
     const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+    const currentUserId = userId || localStorage.getItem('lunjiao_user_id') || 'default'
     const formData = new FormData()
     formData.append('file', file)
+    formData.append('user_id', currentUserId)
 
     try {
       const res = await fetch(`${BASE_URL}/upload`, {
@@ -430,10 +433,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   // ---- Remove uploaded file ----
-  const removeUploadedFile = useCallback(async (fileId: string) => {
+  const removeUploadedFile = useCallback(async (fileId: string, userId?: string) => {
     const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+    const currentUserId = userId || localStorage.getItem('lunjiao_user_id') || 'default'
     try {
-      await fetch(`${BASE_URL}/upload/files/${fileId}`, { method: 'DELETE' })
+      await fetch(`${BASE_URL}/upload/files/${fileId}?user_id=${encodeURIComponent(currentUserId)}`, { method: 'DELETE' })
     } catch { /* ignore */ }
     dispatch({ type: 'REMOVE_UPLOADED_FILE', payload: fileId })
   }, [])

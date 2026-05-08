@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Modal, Button, Spin, Empty, message } from 'antd'
-import { ReloadOutlined, DeleteOutlined, FileOutlined } from '@ant-design/icons'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Modal, Button, Spin, Empty, message, Input, Tag } from 'antd'
+import { ReloadOutlined, DeleteOutlined, FileOutlined, SearchOutlined } from '@ant-design/icons'
 import { listUploadedFiles, deleteUploadedFile } from '../api/chat'
 import type { UploadedFileMeta } from '../api/chat'
 
@@ -33,6 +33,16 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function formatDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr)
+    if (isNaN(d.getTime())) return dateStr
+    return d.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })
+  } catch {
+    return dateStr
+  }
+}
+
 // ============================================================
 // Props
 // ============================================================
@@ -42,18 +52,37 @@ interface KbListModalProps {
   onClose: () => void
 }
 
+type TabKey = 'public' | 'personal'
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'public', label: '公用知识库' },
+  { key: 'personal', label: '个人知识库' },
+]
+
 // ============================================================
 // Component
 // ============================================================
 
 export default function KbListModal({ open, onClose }: KbListModalProps) {
+  const [activeTab, setActiveTab] = useState<TabKey>('public')
   const [files, setFiles] = useState<UploadedFileMeta[]>([])
   const [loading, setLoading] = useState(false)
+  const [keyword, setKeyword] = useState('')
+
+  // Current user id from localStorage (simple approach before real auth)
+  const getUserId = useCallback(() => {
+    return localStorage.getItem('lunjiao_user_id') || 'default'
+  }, [])
 
   const loadFiles = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await listUploadedFiles()
+      const userId = getUserId()
+      const data = await listUploadedFiles({
+        scope: activeTab,
+        user_id: userId,
+        keyword: keyword || undefined,
+      })
       setFiles(data)
     } catch (err) {
       console.error('Failed to load files:', err)
@@ -61,15 +90,30 @@ export default function KbListModal({ open, onClose }: KbListModalProps) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [activeTab, keyword, getUserId])
 
   useEffect(() => {
     if (open) loadFiles()
   }, [open, loadFiles])
 
+  // Reload when tab or keyword changes
+  const handleSearch = (val: string) => {
+    setKeyword(val)
+  }
+
+  const debouncedLoadRef = useRef<ReturnType<typeof setTimeout>>()
+  useEffect(() => {
+    if (!open) return
+    clearTimeout(debouncedLoadRef.current)
+    debouncedLoadRef.current = setTimeout(() => {
+      loadFiles()
+    }, 300)
+    return () => clearTimeout(debouncedLoadRef.current)
+  }, [keyword, open])
+
   const handleRemove = async (file: UploadedFileMeta) => {
     try {
-      await deleteUploadedFile(file.file_id)
+      await deleteUploadedFile(file.file_id, getUserId())
       message.success(`已移除 ${file.file_name}`)
       setFiles((prev) => prev.filter((f) => f.file_id !== file.file_id))
     } catch (err) {
@@ -77,6 +121,9 @@ export default function KbListModal({ open, onClose }: KbListModalProps) {
       message.error('移除文件失败')
     }
   }
+
+  const totalCount = activeTab === 'public' ? files.length : files.length
+  const isPublicUser = getUserId() === 'default'
 
   return (
     <Modal
@@ -86,7 +133,7 @@ export default function KbListModal({ open, onClose }: KbListModalProps) {
           <span>知识库列表</span>
           {!loading && (
             <span style={{ color: '#9ca3af', fontWeight: 400, fontSize: 13, marginLeft: 4 }}>
-              {files.length} 个文件
+              {totalCount} 个文件
             </span>
           )}
         </div>
@@ -98,13 +145,58 @@ export default function KbListModal({ open, onClose }: KbListModalProps) {
           刷新状态
         </Button>
       }
-      width={560}
-      styles={{ body: { padding: '16px 24px', minHeight: 100 } }}
+      width={600}
+      styles={{ body: { padding: '12px 24px', minHeight: 100 } }}
     >
+      {/* Tabs + Search row */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        {/* Left: tabs */}
+        <div style={{ display: 'flex', gap: 4 }}>
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              style={{
+                padding: '6px 16px',
+                fontSize: 13,
+                fontWeight: activeTab === tab.key ? 600 : 400,
+                color: activeTab === tab.key ? '#6366f1' : '#6b7280',
+                background: activeTab === tab.key ? '#eef2ff' : 'transparent',
+                border: 'none',
+                borderRadius: 6,
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Right: search */}
+        <Input
+          placeholder="搜索文件名..."
+          prefix={<SearchOutlined style={{ color: '#9ca3af', fontSize: 12 }} />}
+          value={keyword}
+          onChange={(e) => handleSearch(e.target.value)}
+          allowClear
+          size="small"
+          style={{ width: 180 }}
+        />
+      </div>
+
       <Spin spinning={loading}>
         {files.length === 0 && !loading ? (
           <Empty
-            description="知识库中暂无文件"
+            description={
+              keyword
+                ? `未找到匹配 "${keyword}" 的文件`
+                : activeTab === 'public'
+                  ? '公用知识库暂无文件'
+                  : isPublicUser
+                    ? '您尚未上传任何文件'
+                    : '您还没有个人知识库文件'
+            }
             image={Empty.PRESENTED_IMAGE_SIMPLE}
             style={{ margin: '40px 0' }}
           />
@@ -148,23 +240,29 @@ export default function KbListModal({ open, onClose }: KbListModalProps) {
                     {icon.label}
                   </div>
 
-                  {/* File name and size */}
+                  {/* File name and info */}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        fontSize: 13,
-                        fontWeight: 500,
-                        color: '#1a1b2e',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}
-                      title={file.file_name}
-                    >
-                      {file.file_name}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 500,
+                          color: '#1a1b2e',
+                          whiteSpace: 'nowrap',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                        }}
+                        title={file.file_name}
+                      >
+                        {file.file_name}
+                      </div>
+                      {/* Ownership tag */}
+                      <Tag color={file.user_id === 'default' ? 'blue' : 'geekblue'} style={{ fontSize: 10, margin: 0 }}>
+                        {file.user_id === 'default' ? '公用' : file.user_id}
+                      </Tag>
                     </div>
                     <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>
-                      {formatFileSize(file.file_size)}
+                      {formatFileSize(file.file_size)} · {formatDate(file.uploaded_at)}
                       {file.rag_status === 'pending' && (
                         <span style={{ color: '#f39c12', marginLeft: 8 }}>索引中…</span>
                       )}

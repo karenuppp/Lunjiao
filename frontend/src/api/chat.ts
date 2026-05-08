@@ -134,17 +134,30 @@ export interface UploadedFileMeta {
   file_type: string
   uploaded_at: string
   rag_status: 'indexed' | 'pending' | 'failed'
+  user_id?: string
 }
 
-export async function listUploadedFiles(): Promise<UploadedFileMeta[]> {
-  const res = await fetch(`${BASE_URL}/upload/files`)
+/** List files with optional scope filtering and keyword search. */
+export async function listUploadedFiles(opts?: {
+  scope?: 'all' | 'public' | 'personal'
+  user_id?: string
+  keyword?: string
+}): Promise<UploadedFileMeta[]> {
+  const params = new URLSearchParams()
+  if (opts?.scope) params.set('scope', opts.scope)
+  if (opts?.user_id) params.set('user_id', opts.user_id)
+  if (opts?.keyword) params.set('keyword', opts.keyword)
+
+  const url = `${BASE_URL}/upload/files?${params.toString()}`
+  const res = await fetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json()
   return data.files || []
 }
 
-export async function deleteUploadedFile(fileId: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/upload/files/${fileId}`, { method: 'DELETE' })
+export async function deleteUploadedFile(fileId: string, userId?: string): Promise<void> {
+  const url = `${BASE_URL}/upload/files/${fileId}${userId ? `?user_id=${encodeURIComponent(userId)}` : ''}`
+  const res = await fetch(url, { method: 'DELETE' })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
 }
 

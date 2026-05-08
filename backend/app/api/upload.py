@@ -16,7 +16,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Query
 from pydantic import BaseModel
 
 from app.config import settings
@@ -34,6 +34,7 @@ class UploadResponse(BaseModel):
     uploaded_at: str
     rag_status: str  # "indexed" | "pending" | "failed"
     chunk_count: int = 0
+    user_id: str = "default"
 
 
 class UploadListResponse(BaseModel):
@@ -102,6 +103,7 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
         category = meta.get("category", "上传文件")
         uploaded_at = meta.get("uploaded_at",
                                datetime.fromtimestamp(fpath.stat().st_mtime).isoformat())
+        file_user_id = meta.get("user_id", "default")
 
         rag_status = "indexed"
 
@@ -113,6 +115,7 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
             category=category,
             uploaded_at=uploaded_at,
             rag_status=rag_status,
+            user_id=file_user_id,
         )
 
     return rebuilt
@@ -182,6 +185,7 @@ async def _process_single_file(
                 "original_name": filename,
                 "category": category,
                 "uploaded_at": timestamp,
+                "user_id": user_id,
             }))
     except Exception:
         pass
@@ -281,14 +285,37 @@ async def upload_files_batch(
 
 
 @router.get("/files", response_model=UploadListResponse)
-async def list_uploaded_files():
-    """List all uploaded files and their indexing status.
+async def list_uploaded_files(
+    scope: str = Query("all", pattern="^(public|personal|all)$"),
+    user_id: str = "default",
+    keyword: str = "",
+):
+    """List uploaded files with optional filtering.
 
-    Scans the uploads/ directory every time to reflect actual files on disk,
-    so knowledge base list always shows what's actually there even after restart.
+    Args:
+        scope: 'public' shows only default (department) files,
+               'personal' shows only the current user's files,
+               'all' shows everything.
+        user_id: The current user's ID (used when scope='personal').
+        keyword: Optional filename filter (case-insensitive substring match).
     """
     rebuilt = _rebuild_index_from_disk()
-    return UploadListResponse(files=list(rebuilt.values()))
+
+    filtered: list[UploadResponse] = []
+    for f in rebuilt.values():
+        # Scope filtering
+        if scope == "public":
+            if f.user_id != "default":
+                continue
+        elif scope == "personal":
+            if f.user_id != user_id:
+                continue
+        # keyword search
+        if keyword and keyword.lower() not in f.file_name.lower():
+            continue
+        filtered.append(f)
+
+    return UploadListResponse(files=filtered)
 
 
 @router.get("/stats")
