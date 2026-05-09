@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Layout, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { ChatProvider, useChat } from './store/chatStore'
@@ -19,13 +19,15 @@ function AppInner() {
 
   const appView = chat.appView ?? 'chat'
 
-  // Update header title when view or conversation changes
-  if (appView === 'kb') {
-    setSessionTitle(prev => prev !== '知识库管理' ? '知识库管理' : prev)
-  } else if (!sessionTitle || sessionTitle === '知识库管理') {
-    const activeConv = chat.conversations.find((c: any) => c.id === chat.activeConversationId)
-    setSessionTitle(activeConv ? (activeConv.title || '智能问答') : '新对话')
-  }
+  // Sync header title when view or conversation changes
+  useEffect(() => {
+    if (appView === 'kb') {
+      setSessionTitle('知识库管理')
+    } else {
+      const activeConv = chat.conversations.find((c: any) => c.id === chat.activeConversationId)
+      setSessionTitle(activeConv ? (activeConv.title || '智能问答') : '新对话')
+    }
+  }, [appView, chat.activeConversationId, chat.conversations])
 
   const conversations = chat.conversations ?? []
   const convList = conversations.map((c: any) => ({
