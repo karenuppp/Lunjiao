@@ -8,6 +8,7 @@
  */
 
 import { useState } from 'react'
+import { loginUser } from '../api/chat'
 import './Login.css'
 
 interface LoginPageProps {
@@ -34,13 +35,23 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setError('')
     setLoading(true)
 
-    // Simulate brief auth delay for UX polish
-    await new Promise((r) => setTimeout(r, 600))
+    try {
+      const result = await loginUser(account.trim(), password.trim())
 
-    // For now, user_id = account (future: JWT token flow)
-    localStorage.setItem('lunjiao_user_id', account.trim())
-    setLoading(false)
-    onLogin(account.trim())
+      if (!result.ok) {
+        setError(result.error || '登录失败')
+        setLoading(false)
+        return
+      }
+
+      // 登录成功 — 存储 user_id
+      localStorage.setItem('lunjiao_user_id', result.user_id || account.trim())
+      onLogin(result.user_id || account.trim())
+    } catch {
+      setError('网络错误，请检查后端服务是否启动')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (

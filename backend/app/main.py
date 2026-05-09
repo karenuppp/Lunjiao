@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import chat, data_sources, history, upload
+from app.api import chat, data_sources, history, upload, auth
 
 app = FastAPI(
     title="Lunjiao - 部门智能问答系统",
@@ -32,3 +32,4 @@ app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(data_sources.router, prefix="/api/data-sources", tags=["data-sources"])
 app.include_router(history.router, prefix="/api/history", tags=["history"])
 app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
+app.include_router(auth.router, prefix="/api/auth", tags=["auth"])

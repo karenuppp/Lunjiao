@@ -10,6 +10,21 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api
 // Chat APIs
 // ============================================================
 
+/** Login — verify credentials against backend */
+export async function loginUser(account: string, password: string): Promise<{
+  ok: boolean
+  user_id?: string
+  error?: string
+}> {
+  const res = await fetch(`${BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ account, password }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
 /** Send a non-streaming chat message */
 export async function sendChat(request: ChatRequest): Promise<ChatResponse> {
   const res = await fetch(`${BASE_URL}/chat/`, {
@@ -185,3 +200,4 @@ export async function uploadFilesBatch(files: File[]): Promise<BatchUploadResult
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`)
   return res.json()
 }
+
