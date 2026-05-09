@@ -201,3 +201,29 @@ export async function uploadFilesBatch(files: File[]): Promise<BatchUploadResult
   return res.json()
 }
 
+/** Batch upload with user_id and category for personal knowledge base. */
+export async function uploadFilesBatchWithUser(
+  files: File[],
+  userId: string,
+  category: string = '上传文件',
+): Promise<BatchUploadResult> {
+  const formData = new FormData()
+  for (const file of files) {
+    formData.append('files', file)
+  }
+  formData.append('user_id', userId)
+  formData.append('category', category)
+
+  const res = await fetch(`${BASE_URL}/upload/batch`, {
+    method: 'POST',
+    body: formData,
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${await res.text()}`)
+  return res.json()
+}
+
+/** Check if filename is a compressed archive (handled by backend). */
+export function isArchiveFile(filename: string): boolean {
+  const ext = filename.toLowerCase()
+  return ext.endsWith('.zip') || ext.endsWith('.rar') || ext.endsWith('.7z') || ext.endsWith('.tar.gz') || ext.endsWith('.tgz')
+}

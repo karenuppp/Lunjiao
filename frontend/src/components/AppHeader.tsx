@@ -5,10 +5,11 @@ interface AppHeaderProps {
   collapsed: boolean
   onToggleSidebar: () => void
   sessionTitle: string
+  currentView?: 'chat' | 'kb'
 }
 
 export default function AppHeader({
-  collapsed, onToggleSidebar, sessionTitle,
+  collapsed, onToggleSidebar, sessionTitle, currentView = 'chat',
 }: AppHeaderProps) {
   return (
     <div className="top-bar">

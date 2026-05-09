@@ -14,11 +14,14 @@ interface SidebarProps {
   onNewConversation: () => void
   onSwitchConversation: (id: string | null) => void
   onRemoveConversation: (id: string) => void
+  onViewChange: (view: 'chat' | 'kb') => void
+  currentView: 'chat' | 'kb'
 }
 
 export default function Sidebar({
   collapsed, activeConversationId, conversations,
   onNewConversation, onSwitchConversation, onRemoveConversation,
+  onViewChange, currentView,
 }: SidebarProps) {
   return (
     <div style={{ padding: '16px 8px', height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -105,6 +108,37 @@ export default function Sidebar({
             </span>
           </div>
         ))}
+      </div>
+
+      {/* Bottom: Knowledge base entry */}
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8 }}>
+        <button
+          onClick={() => onViewChange(currentView === 'kb' ? 'chat' : 'kb')}
+          style={{
+            width: '100%',
+            padding: '10px 16px',
+            borderRadius: 8,
+            border: 'none',
+            background: currentView === 'kb' ? 'rgba(255,255,255,0.08)' : 'transparent',
+            color: currentView === 'kb' ? '#fff' : '#9ca3af',
+            cursor: 'pointer',
+            fontSize: 14,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            transition: 'all 0.15s',
+          }}
+          onMouseEnter={(e) => {
+            if (currentView !== 'kb') e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+            else e.currentTarget.style.background = 'rgba(255,255,255,0.12)'
+          }}
+          onMouseLeave={(e) => {
+            if (currentView !== 'kb') e.currentTarget.style.background = 'transparent'
+            else e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
+          }}
+        >
+          <span style={{ fontSize: 16, lineHeight: 1 }}>📂</span> 知识库
+        </button>
       </div>
     </div>
   )

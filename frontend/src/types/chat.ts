@@ -111,6 +111,37 @@ export interface ChatState {
 }
 
 // ============================================================
+// File Upload / Knowledge Base Types
+// ============================================================
+
+/** App view mode */
+export type AppView = 'chat' | 'kb'
+
+/** KbManagePage tab */
+export type KbTab = 'upload' | 'files'
+
+/** A file selected by user but not yet uploaded */
+export interface PendingFile {
+  uid: string             // unique local id for list rendering
+  file: File              // browser File object
+  name: string
+  size: number
+  isArchive: boolean      // whether it's a compressed archive (.zip/.rar/.7z/.tar.gz)
+}
+
+/** Status of an upload-in-progress entry */
+export type FileUploadStatus = 'waiting' | 'uploading' | 'unpacking' | 'indexing' | 'done' | 'error'
+
+export interface UploadProgressItem {
+  uid: string
+  name: string
+  status: FileUploadStatus
+  error?: string
+  /** For archives: children files extracted */
+  archiveChildren?: { name: string; status: FileUploadStatus; error?: string }[]
+}
+
+// ============================================================
 // Chart Types (for ECharts rendering)
 // ============================================================
 

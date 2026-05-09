@@ -336,3 +336,379 @@
 .ant-list-item {
   transition: background 0.15s ease;
 }
+
+/* ============================================================
+   Knowledge Base Management Page
+   ============================================================ */
+
+/* --- Page layout --- */
+.kb-page {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  height: 100%;
+}
+
+.kb-header {
+  padding: 20px 32px 0;
+  flex-shrink: 0;
+}
+
+.kb-header h1 {
+  margin: 0 0 16px;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.kb-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.kb-tab {
+  padding: 10px 24px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b7280;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.kb-tab:hover {
+  color: var(--primary);
+}
+
+.kb-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+.kb-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px;
+}
+
+.kb-content::-webkit-scrollbar {
+  width: 5px;
+}
+.kb-content::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 3px;
+}
+
+/* --- Upload tab: drag zone --- */
+.kb-upload-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 32px;
+  border: 2px dashed #d1d5db;
+  border-radius: 12px;
+  background: #fafbfc;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.kb-upload-zone:hover {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.02);
+}
+
+.kb-upload-zone.drag-over {
+  border-color: var(--primary);
+  background: rgba(99, 102, 241, 0.06);
+  transform: scale(1.01);
+}
+
+.kb-upload-zone-icon {
+  font-size: 40px;
+  margin-bottom: 12px;
+  opacity: 0.7;
+}
+
+.kb-upload-zone .zone-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.kb-upload-zone .zone-hint {
+  font-size: 13px;
+  color: #9ca3af;
+  line-height: 1.6;
+}
+
+/* --- Pending file list --- */
+.kb-pending-section {
+  margin-bottom: 24px;
+}
+
+.kb-pending-section .section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.kb-pending-section .section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.kb-pending-section .section-count {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+.kb-pending-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.kb-pending-list::-webkit-scrollbar {
+  width: 4px;
+}
+.kb-pending-list::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.08);
+  border-radius: 2px;
+}
+
+.kb-pending-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #f9fafb;
+  transition: background 0.15s ease;
+}
+
+.kb-pending-item:hover {
+  background: #f3f4f6;
+}
+
+.kb-pending-item .file-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.kb-pending-item .file-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.kb-pending-item .file-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kb-pending-item .file-size {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.kb-pending-item .file-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  background: #eef2ff;
+  color: #6366f1;
+  margin-left: 6px;
+}
+
+.kb-pending-item .remove-btn {
+  background: none;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.kb-pending-item .remove-btn:hover {
+  color: #ef4444;
+  background: #fef2f2;
+}
+
+/* --- Confirm button --- */
+.kb-confirm-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 24px;
+}
+
+.kb-confirm-btn {
+  padding: 10px 32px;
+  border: none;
+  border-radius: 8px;
+  background: var(--primary);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.kb-confirm-btn:hover {
+  background: var(--primary-hover);
+}
+
+.kb-confirm-btn:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}
+
+/* --- Progress section --- */
+.kb-progress-section {
+  margin-bottom: 24px;
+}
+
+.kb-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kb-progress-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #f9fafb;
+}
+
+.kb-progress-item .progress-status {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kb-progress-item .progress-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.kb-progress-item .progress-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.kb-progress-item .progress-desc {
+  font-size: 11px;
+  color: #9ca3af;
+  margin-top: 2px;
+}
+
+.kb-progress-item .progress-bar-wrap {
+  width: 120px;
+  height: 4px;
+  border-radius: 2px;
+  background: #e5e7eb;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.kb-progress-item .progress-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: var(--primary);
+  transition: width 0.3s ease;
+}
+
+.kb-progress-item.done .progress-bar-fill {
+  background: #22c55e;
+}
+
+.kb-progress-item.error .progress-bar-fill {
+  background: #ef4444;
+}
+
+/* Archive children */
+.kb-archive-children {
+  margin-top: 6px;
+  margin-left: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.kb-archive-child {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #6b7280;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #f3f4f6;
+}
+
+.kb-archive-child .child-status {
+  font-size: 11px;
+}
+
+/* --- Overall progress --- */
+.kb-overall-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.kb-overall-progress .overall-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+
+.kb-overall-progress .overall-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--primary);
+  transition: width 0.3s ease;
+}
+
+.kb-overall-progress .overall-text {
+  font-size: 12px;
+  color: #9ca3af;
+  white-space: nowrap;
+}

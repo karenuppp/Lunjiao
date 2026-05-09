@@ -8,8 +8,8 @@ import {
   useEffect,
   type ReactNode,
 } from 'react'
-import type { DataCategory } from '../types/chat'
-import { sendChatStream } from '../api/chat'
+import type { DataCategory, PendingFile, UploadProgressItem, AppView } from '../types/chat'
+import { sendChatStream, isArchiveFile, uploadFilesBatchWithUser } from '../api/chat'
 
 // ============================================================
 // Persist conversations to localStorage
@@ -59,6 +59,10 @@ interface ChatState {
   selectedCategory: DataCategory[]
   currentTool: string | null
   uploadedFiles: UploadedFileMeta[]
+  appView: AppView
+  pendingFiles: PendingFile[]
+  uploadProgress: UploadProgressItem[]
+  isUploading: boolean
 }
 
 interface UploadedFileMeta {
@@ -75,6 +79,10 @@ const initialState: ChatState = {
   selectedCategory: ['全部'],
   currentTool: null,
   uploadedFiles: [],
+  appView: 'chat',
+  pendingFiles: [],
+  uploadProgress: [],
+  isUploading: false,
 }
 
 // Merge persisted data into initial state
@@ -103,6 +111,12 @@ type ChatAction =
   | { type: 'ADD_UPLOADED_FILE'; payload: UploadedFileMeta }
   | { type: 'REMOVE_UPLOADED_FILE'; payload: string }
   | { type: 'RENAME_CONVERSATION'; payload: { id: string; title: string } }
+  | { type: 'SET_VIEW'; payload: AppView }
+  | { type: 'ADD_PENDING_FILES'; payload: PendingFile[] }
+  | { type: 'REMOVE_PENDING_FILE'; payload: string }
+  | { type: 'CLEAR_PENDING_FILES' }
+  | { type: 'SET_UPLOADING'; payload: boolean }
+  | { type: 'UPDATE_UPLOAD_PROGRESS'; payload: UploadProgressItem[] }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -217,6 +231,30 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ),
       }
 
+    case 'SET_VIEW':
+      return { ...state, appView: action.payload }
+
+    case 'ADD_PENDING_FILES':
+      return {
+        ...state,
+        pendingFiles: [...state.pendingFiles, ...action.payload],
+      }
+
+    case 'REMOVE_PENDING_FILE':
+      return {
+        ...state,
+        pendingFiles: state.pendingFiles.filter((f) => f.uid !== action.payload),
+      }
+
+    case 'CLEAR_PENDING_FILES':
+      return { ...state, pendingFiles: [] }
+
+    case 'SET_UPLOADING':
+      return { ...state, isUploading: action.payload }
+
+    case 'UPDATE_UPLOAD_PROGRESS':
+      return { ...state, uploadProgress: action.payload }
+
     default:
       return state
   }
@@ -236,6 +274,11 @@ interface ChatContextValue {
   setCategory: (cat: DataCategory[]) => void
   uploadFile: (file: File) => Promise<UploadedFileMeta | null>
   removeUploadedFile: (fileId: string) => void
+  setView: (view: AppView) => void
+  addPendingFiles: (files: FileList | File[]) => void
+  removePendingFile: (uid: string) => void
+  clearPendingFiles: () => void
+  confirmUpload: () => Promise<void>
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null)
@@ -442,6 +485,103 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'REMOVE_UPLOADED_FILE', payload: fileId })
   }, [])
 
+  // ---- Set app view ----
+  const setView = useCallback((view: AppView) => {
+    dispatch({ type: 'SET_VIEW', payload: view })
+  }, [])
+
+  // ---- Add pending files ----
+  const addPendingFiles = useCallback((files: FileList | File[]) => {
+    const arr = Array.from(files)
+    const pending: PendingFile[] = arr.map((f) => ({
+      uid: `pf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      file: f,
+      name: f.name,
+      size: f.size,
+      isArchive: isArchiveFile(f.name),
+    }))
+    dispatch({ type: 'ADD_PENDING_FILES', payload: pending })
+  }, [])
+
+  // ---- Remove one pending file ----
+  const removePendingFile = useCallback((uid: string) => {
+    dispatch({ type: 'REMOVE_PENDING_FILE', payload: uid })
+  }, [])
+
+  // ---- Clear pending files ----
+  const clearPendingFiles = useCallback(() => {
+    dispatch({ type: 'CLEAR_PENDING_FILES' })
+  }, [])
+
+  // ---- Confirm upload (batch) ----
+  const confirmUpload = useCallback(async () => {
+    const pending = persistedRef.current.pendingFiles
+    if (pending.length === 0) return
+
+    const userId = localStorage.getItem('lunjiao_user_id') || 'default'
+
+    // Build initial progress items
+    const progress = pending.map<UploadProgressItem>((pf) => ({
+      uid: pf.uid,
+      name: pf.name,
+      status: 'waiting',
+      archiveChildren: pf.isArchive ? [] : undefined,
+    }))
+    dispatch({ type: 'SET_UPLOADING', payload: true })
+    dispatch({ type: 'UPDATE_UPLOAD_PROGRESS', payload: progress })
+
+    // Submit all files
+    const files = pending.map((pf) => pf.file)
+
+    try {
+      const result = await uploadFilesBatchWithUser(files, userId)
+
+      // Mark each file as done or error based on result
+      const updated: UploadProgressItem[] = pending.map((pf) => {
+        const match = result.files.find((f) => f.file_name === pf.name)
+        if (match) {
+          return {
+            uid: pf.uid,
+            name: pf.name,
+            status: 'done',
+            archiveChildren: pf.isArchive
+              ? [{ name: '已解压并索引', status: 'done' }]
+              : undefined,
+          } as UploadProgressItem
+        }
+        const errMatch = result.errors.find((e) => e.filename === pf.name)
+        if (errMatch) {
+          return { uid: pf.uid, name: pf.name, status: 'error', error: errMatch.error }
+        }
+        return { uid: pf.uid, name: pf.name, status: 'error', error: '未知错误' }
+      })
+      dispatch({ type: 'UPDATE_UPLOAD_PROGRESS', payload: updated })
+
+      // Add successfully uploaded files to uploadedFiles
+      for (const f of result.files) {
+        dispatch({
+          type: 'ADD_UPLOADED_FILE',
+          payload: {
+            fileId: f.file_id,
+            fileName: f.file_name,
+            fileSize: f.file_size,
+            ragStatus: f.rag_status,
+          },
+        })
+      }
+    } catch (err) {
+      const updated: UploadProgressItem[] = pending.map((pf) => ({
+        uid: pf.uid,
+        name: pf.name,
+        status: 'error',
+        error: err instanceof Error ? err.message : String(err),
+      }))
+      dispatch({ type: 'UPDATE_UPLOAD_PROGRESS', payload: updated })
+    } finally {
+      dispatch({ type: 'SET_UPLOADING', payload: false })
+    }
+  }, [])
+
   // ---- Computed values (accessed via hook) ----
   const value: ChatContextValue = {
     state,
@@ -453,6 +593,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setCategory,
     uploadFile,
     removeUploadedFile,
+    setView,
+    addPendingFiles,
+    removePendingFile,
+    clearPendingFiles,
+    confirmUpload,
   }
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
@@ -474,6 +619,10 @@ export function useChat() {
     selectedCategory: ctx.state.selectedCategory,
     currentTool: ctx.state.currentTool,
     uploadedFiles: ctx.state.uploadedFiles,
+    appView: ctx.state.appView,
+    pendingFiles: ctx.state.pendingFiles,
+    uploadProgress: ctx.state.uploadProgress,
+    isUploading: ctx.state.isUploading,
     // Actions
     sendChat: ctx.sendChat,
     newConversation: ctx.newConversation,
@@ -482,5 +631,10 @@ export function useChat() {
     setCategory: ctx.setCategory,
     uploadFile: ctx.uploadFile,
     removeUploadedFile: ctx.removeUploadedFile,
+    setView: ctx.setView,
+    addPendingFiles: ctx.addPendingFiles,
+    removePendingFile: ctx.removePendingFile,
+    clearPendingFiles: ctx.clearPendingFiles,
+    confirmUpload: ctx.confirmUpload,
   }
 }

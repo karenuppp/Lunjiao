@@ -5,6 +5,7 @@ import { ChatProvider, useChat } from './store/chatStore'
 import Sidebar from './components/Sidebar'
 import AppHeader from './components/AppHeader'
 import ChatPanel from './components/ChatPanel'
+import KbManagePage from './components/KbManagePage'
 import KbListModal from './components/KbListModal'
 import LoginPage from './components/LoginPage'
 
@@ -15,6 +16,16 @@ function AppInner() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sessionTitle, setSessionTitle] = useState('新对话')
   const [kbListOpen, setKbListOpen] = useState(false)
+
+  const appView = chat.appView ?? 'chat'
+
+  // Update header title when view or conversation changes
+  if (appView === 'kb') {
+    setSessionTitle(prev => prev !== '知识库管理' ? '知识库管理' : prev)
+  } else if (!sessionTitle || sessionTitle === '知识库管理') {
+    const activeConv = chat.conversations.find((c: any) => c.id === chat.activeConversationId)
+    setSessionTitle(activeConv ? (activeConv.title || '智能问答') : '新对话')
+  }
 
   const conversations = chat.conversations ?? []
   const convList = conversations.map((c: any) => ({
@@ -32,8 +43,21 @@ function AppInner() {
           collapsed={sidebarCollapsed} activeConversationId={chat.activeConversationId}
           conversations={convList}
           onNewConversation={() => { chat.newConversation(); setSessionTitle('新对话') }}
-          onSwitchConversation={(id) => { chat.switchConversation(id); setSessionTitle(id ? '智能问答' : '新对话') }}
+          onSwitchConversation={(id) => {
+            chat.switchConversation(id)
+            const conv = id ? (chat.conversations.find((c: any) => c.id === id)) : null
+            setSessionTitle(conv ? (conv.title || '智能问答') : '新对话')
+          }}
           onRemoveConversation={chat.removeConversation}
+          onViewChange={(view) => {
+            chat.setView(view)
+            if (view === 'kb') setSessionTitle('知识库管理')
+            else {
+              const activeConv = chat.conversations.find((c: any) => c.id === chat.activeConversationId)
+              setSessionTitle(activeConv ? (activeConv.title || '智能问答') : '新对话')
+            }
+          }}
+          currentView={appView}
         />
       </Sider>
 
@@ -42,18 +66,23 @@ function AppInner() {
           collapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
           sessionTitle={sessionTitle}
+          currentView={appView}
         />
         <Content style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          <ChatPanel
-            messages={chat.messages ?? []}
-            isLoading={chat.isLoading ?? false}
-            currentTool={chat.currentTool ?? null}
-            uploadedFiles={chat.uploadedFiles ?? []}
-            onSendChat={chat.sendChat}
-            onUploadFile={chat.uploadFile}
-            onRemoveUploadedFile={chat.removeUploadedFile}
-            onOpenKbList={() => setKbListOpen(true)}
-          />
+          {appView === 'kb' ? (
+            <KbManagePage />
+          ) : (
+            <ChatPanel
+              messages={chat.messages ?? []}
+              isLoading={chat.isLoading ?? false}
+              currentTool={chat.currentTool ?? null}
+              uploadedFiles={chat.uploadedFiles ?? []}
+              onSendChat={chat.sendChat}
+              onUploadFile={chat.uploadFile}
+              onRemoveUploadedFile={chat.removeUploadedFile}
+              onOpenKbList={() => setKbListOpen(true)}
+            />
+          )}
         </Content>
       </Layout>
 
