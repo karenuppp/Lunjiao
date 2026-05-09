@@ -1,0 +1,216 @@
+/* ============================================================
+   Login Page — "Refined Institutional Portal"
+   Coordinates with the existing Lunjiao design language:
+   - Navy sidebar (#1a1b2e) → full-page background
+   - Indigo primary (#6366f1 / #4d6de6) → interactive accent
+   - Light gray (#f7f8fa) → card surface
+   - Same font stack and border-radius tokens as App.css
+   ============================================================ */
+
+/* ── Page container ──────────────────────────────────────── */
+.login-page {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1a1b2e;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text',
+    'PingFang SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Background pattern — subtle geometric texture ───────── */
+.login-bg-pattern {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    /* radial glow top-center */
+    radial-gradient(ellipse 80% 60% at 50% 0%, rgba(99,102,241,0.08) 0%, transparent 60%),
+    /* dot grid */
+    radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 100% 100%, 40px 40px;
+}
+
+/* ── Card — centered white surface ───────────────────────── */
+.login-card {
+  position: relative;
+  z-index: 1;
+  width: 400px;
+  max-width: calc(100vw - 48px);
+  padding: 48px 40px 40px;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.04),
+    0 8px 32px rgba(0,0,0,0.12),
+    0 24px 64px rgba(0,0,0,0.08);
+  animation: loginCardEnter 0.5s ease-out both;
+}
+
+@keyframes loginCardEnter {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Brand section ───────────────────────────────────────── */
+.login-brand {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.login-brand-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #4d6de6 0%, #6366f1 100%);
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 16px rgba(77,109,230,0.3);
+}
+
+.login-brand-name {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 700;
+  color: #1a1b2e;
+  letter-spacing: 2px;
+}
+
+.login-brand-sub {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #9ca3af;
+  letter-spacing: 1px;
+}
+
+/* ── Form ────────────────────────────────────────────────── */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.login-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4b5563;
+  padding-left: 2px;
+}
+
+.login-input {
+  height: 44px;
+  padding: 0 14px;
+  border: 1px solid #d8d9de;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #1a1b2e;
+  background: #f9fafb;
+  outline: none;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.login-input::placeholder {
+  color: #c4c7cc;
+}
+
+.login-input:focus {
+  border-color: #6366f1;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.08);
+}
+
+/* ── Error message ───────────────────────────────────────── */
+.login-error {
+  font-size: 13px;
+  color: #ef4444;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(239,68,68,0.06);
+  animation: loginErrorShake 0.3s ease;
+}
+
+@keyframes loginErrorShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+
+/* ── Submit button ───────────────────────────────────────── */
+.login-btn {
+  height: 44px;
+  margin-top: 4px;
+  border: none;
+  border-radius: 10px;
+  background: #4d6de6;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-btn:hover {
+  background: #3b5bd1;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(77,109,230,0.35);
+}
+
+.login-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(77,109,230,0.25);
+}
+
+.login-btn:disabled {
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.login-btn--loading {
+  background: #7c8ef0;
+}
+
+/* ── Button spinner ──────────────────────────────────────── */
+.login-btn-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255,255,255,0.3);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: loginSpinner 0.6s linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes loginSpinner {
+  to { transform: rotate(360deg); }
+}

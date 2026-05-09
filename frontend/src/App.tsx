@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { Layout, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { ChatProvider, useChat } from './store/chatStore'
@@ -6,6 +6,7 @@ import Sidebar from './components/Sidebar'
 import AppHeader from './components/AppHeader'
 import ChatPanel from './components/ChatPanel'
 import KbListModal from './components/KbListModal'
+import LoginPage from './components/LoginPage'
 
 const { Sider, Content } = Layout
 
@@ -62,6 +63,24 @@ function AppInner() {
 }
 
 export default function App() {
+  // Check for existing session on mount
+  const [loggedIn, setLoggedIn] = useState(() => {
+    const uid = localStorage.getItem('lunjiao_user_id')
+    return !!uid && uid !== 'default'
+  })
+
+  const handleLogin = useCallback((_userId: string) => {
+    setLoggedIn(true)
+  }, [])
+
+  if (!loggedIn) {
+    return (
+      <ConfigProvider locale={zhCN} theme={{ token: { colorPrimary: '#6366f1', borderRadius: 6 } }}>
+        <LoginPage onLogin={handleLogin} />
+      </ConfigProvider>
+    )
+  }
+
   return (
     <ConfigProvider locale={zhCN} theme={{ token: { colorPrimary: '#6366f1', borderRadius: 6 } }}>
       <ChatProvider><AppInner /></ChatProvider>
