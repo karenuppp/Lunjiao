@@ -117,6 +117,7 @@ type ChatAction =
   | { type: 'CLEAR_PENDING_FILES' }
   | { type: 'SET_UPLOADING'; payload: boolean }
   | { type: 'UPDATE_UPLOAD_PROGRESS'; payload: UploadProgressItem[] }
+  | { type: 'CLEAR_UPLOAD_PROGRESS' }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -255,6 +256,9 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'UPDATE_UPLOAD_PROGRESS':
       return { ...state, uploadProgress: action.payload }
 
+    case 'CLEAR_UPLOAD_PROGRESS':
+      return { ...state, uploadProgress: [] }
+
     default:
       return state
   }
@@ -278,6 +282,7 @@ interface ChatContextValue {
   addPendingFiles: (files: FileList | File[]) => void
   removePendingFile: (uid: string) => void
   clearPendingFiles: () => void
+  clearUploadProgress: () => void
   confirmUpload: () => Promise<void>
 }
 
@@ -513,6 +518,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'CLEAR_PENDING_FILES' })
   }, [])
 
+  // ---- Clear upload progress ----
+  const clearUploadProgress = useCallback(() => {
+    dispatch({ type: 'CLEAR_UPLOAD_PROGRESS' })
+  }, [])
+
   // ---- Confirm upload (batch) ----
   const confirmUpload = useCallback(async () => {
     const pending = persistedRef.current.pendingFiles
@@ -597,6 +607,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     addPendingFiles,
     removePendingFile,
     clearPendingFiles,
+    clearUploadProgress,
     confirmUpload,
   }
 
@@ -635,6 +646,7 @@ export function useChat() {
     addPendingFiles: ctx.addPendingFiles,
     removePendingFile: ctx.removePendingFile,
     clearPendingFiles: ctx.clearPendingFiles,
+    clearUploadProgress: ctx.clearUploadProgress,
     confirmUpload: ctx.confirmUpload,
   }
 }

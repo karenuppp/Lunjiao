@@ -14,14 +14,13 @@ interface SidebarProps {
   onNewConversation: () => void
   onSwitchConversation: (id: string | null) => void
   onRemoveConversation: (id: string) => void
-  onViewChange: (view: 'chat' | 'kb') => void
-  currentView: 'chat' | 'kb'
+  onOpenKbManage: () => void
 }
 
 export default function Sidebar({
   collapsed, activeConversationId, conversations,
   onNewConversation, onSwitchConversation, onRemoveConversation,
-  onViewChange, currentView,
+  onOpenKbManage,
 }: SidebarProps) {
   return (
     <div style={{ padding: '16px 8px', height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -113,14 +112,14 @@ export default function Sidebar({
       {/* Bottom: Knowledge base entry */}
       <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 8 }}>
         <button
-          onClick={() => onViewChange(currentView === 'kb' ? 'chat' : 'kb')}
+          onClick={onOpenKbManage}
           style={{
             width: '100%',
             padding: '10px 16px',
             borderRadius: 8,
             border: 'none',
-            background: currentView === 'kb' ? 'rgba(255,255,255,0.08)' : 'transparent',
-            color: currentView === 'kb' ? '#fff' : '#9ca3af',
+            background: 'transparent',
+            color: '#9ca3af',
             cursor: 'pointer',
             fontSize: 14,
             display: 'flex',
@@ -128,14 +127,8 @@ export default function Sidebar({
             gap: 8,
             transition: 'all 0.15s',
           }}
-          onMouseEnter={(e) => {
-            if (currentView !== 'kb') e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
-            else e.currentTarget.style.background = 'rgba(255,255,255,0.12)'
-          }}
-          onMouseLeave={(e) => {
-            if (currentView !== 'kb') e.currentTarget.style.background = 'transparent'
-            else e.currentTarget.style.background = 'rgba(255,255,255,0.08)'
-          }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)' }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
         >
           <span style={{ fontSize: 16, lineHeight: 1 }}>📂</span> 知识库
         </button>
