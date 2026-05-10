@@ -1,25 +1,7 @@
-import { useState, useRef, useEffect, ChangeEvent, DragEvent } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { message } from 'antd'
-import { uploadFilesBatch } from '../api/chat'
-import type { UploadedFile } from '../types/chat'
-import { useChat } from '../store/chatStore'
 import './chat.css'
-
-const SUGGESTIONS = [
-  '上月设备故障率趋势',
-  '各部门人员分布',
-  '本季度财务支出汇总',
-]
-
-const ALLOWED_EXTENSIONS = ['.pdf','.docx','.doc','.xlsx','.xls','.pptx','.csv','.txt','.md','.png','.jpg','.jpeg']
-const MAX_FILE_SIZE = 50 * 1024 * 1024
-
-function isAllowedFile(name: string): boolean {
-  const ext = '.' + name.split('.').pop()?.toLowerCase()
-  return ALLOWED_EXTENSIONS.includes(ext)
-}
 
 interface Message {
   id: string
@@ -34,24 +16,16 @@ interface ChatPanelProps {
   currentTool: string | null
   uploadedFiles: UploadedFileMeta[]
   onSendChat: (message: string) => void
-  onUploadFile: (file: File) => void
   onRemoveUploadedFile: (fileId: string) => void
-  onOpenKbList?: () => void
 }
 
 export default function ChatPanel({
   messages, isLoading,  currentTool, uploadedFiles,
-  onSendChat, onUploadFile, onRemoveUploadedFile, onOpenKbList,
+  onSendChat, onRemoveUploadedFile,
 }: ChatPanelProps) {
   const [input, setInput] = useState('')
-  const [showUploadZone, setShowUploadZone] = useState(false)
-  const [dragOver, setDragOver] = useState(false)
-  const [uploading, setUploading] = useState(false)
-  const { dispatch } = useChat()
-
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -80,69 +54,6 @@ export default function ChatPanel({
     }
   }
 
-  // ============================================================
-  // File upload handlers — supports single & multi-file via drag/drop or click
-  // ============================================================
-
-  const handleFileSelect = async (files: FileList | File[]) => {
-    const fileArray = Array.from(files)
-    if (fileArray.length === 0) return
-
-    // Validate each file
-    for (const file of fileArray) {
-      if (file.size > 50 * 1024 * 1024) {
-        message.warning(`${file.name} 超过 50MB，已跳过`)
-        continue
-      }
-    }
-
-    const validFiles = fileArray.filter((f) => f.size <= 50 * 1024 * 1024)
-    if (validFiles.length === 0) return
-
-    setUploading(true)
-    try {
-      const result = await uploadFilesBatch(validFiles)
-      // Add successfully uploaded files to store
-      for (const meta of result.files) {
-        dispatch({
-          type: 'ADD_UPLOADED_FILE',
-          payload: {
-            fileId: meta.file_id,
-            fileName: meta.file_name,
-            fileSize: meta.file_size,
-            ragStatus: meta.rag_status,
-          },
-        })
-      }
-
-      if (result.success_count > 0) {
-        message.success(`上传成功 ${result.success_count} 个文件`)
-      }
-      if (result.errors.length > 0) {
-        message.error(
-          `${result.errors.length} 个文件上传失败: ${result.errors.map((e) => e.filename).join(', ')}`,
-        )
-      }
-    } catch (err) {
-      console.error('Batch upload error:', err)
-      message.error('批量上传失败')
-    } finally {
-      setUploading(false)
-      setShowUploadZone(false)
-    }
-  }
-
-  const handleInputFileChange = (e: ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files?.length) handleFileSelect(e.target.files)
-    e.target.value = ''
-  }
-
-  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    setDragOver(false)
-    if (e.dataTransfer.files.length > 0) handleFileSelect(e.dataTransfer.files)
-  }
-
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
@@ -160,17 +71,9 @@ export default function ChatPanel({
             <p style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 500, color: '#1a1b2e' }}>
               今天想查点什么？
             </p>
-            <p style={{ margin: '0 0 36px', fontSize: 14, color: '#9ca3af' }}>
+            <p style={{ margin: '0 0 24px', fontSize: 14, color: '#9ca3af' }}>
               直接提问即可，系统将自动检索知识库与数据库获取答案
             </p>
-            {/* Suggestion chips */}
-            <div className="suggestion-chips" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-              {SUGGESTIONS.map((s) => (
-                <button key={s} onClick={() => onSendChat(s)}>
-                  {s}
-                </button>
-              ))}
-            </div>
           </div>
         ) : (
           <>
@@ -231,25 +134,6 @@ export default function ChatPanel({
 
       {/* ========== Input area ========== */}
       <div className="chat-input-area">
-        {/* Upload zone */}
-        {showUploadZone && (
-          <div
-            className={`upload-zone ${dragOver ? 'drag-over' : ''}`}
-            onDrop={handleDrop} onDragOver={(e) => { e.preventDefault(); setDragOver(true) }}
-            onDragLeave={() => setDragOver(false)}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {uploading ? '上传中...' : (
-              <span>📎 拖拽文件到此处，或点击选择<br />
-                <small style={{ color: '#9ca3af' }}>支持多文件，PDF, DOCX, XLSX, CSV, TXT, MD（最大 50MB/个）</small>
-              </span>
-            )}
-          </div>
-        )}
-        <input ref={fileInputRef} type="file" multiple
-          style={{ display: 'none' }} onChange={handleInputFileChange}
-          accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.csv,.txt,.md,.png,.jpg,.jpeg" />
-
         {/* Uploaded files */}
         {uploadedFiles.length > 0 && (
           <div className="uploaded-files-list">
@@ -272,12 +156,8 @@ export default function ChatPanel({
             value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} rows={1} disabled={isLoading} />
         </div>
 
-        {/* Controls — upload + knowledge base list + send */}
+        {/* Controls — send */}
         <div className="input-controls">
-          <div style={{ display: 'flex', gap: 6 }}>
-            <button className="input-btn" onClick={() => setShowUploadZone(!showUploadZone)}>📎 上传文件</button>
-            <button className="input-btn" onClick={() => onOpenKbList?.()}>📂 知识库列表</button>
-          </div>
           <button className={`send-btn ${canSend ? 'active' : ''}`} onClick={handleSend} disabled={!canSend}>
             发送 ↵
           </button>

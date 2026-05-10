@@ -6,7 +6,6 @@ import Sidebar from './components/Sidebar'
 import AppHeader from './components/AppHeader'
 import ChatPanel from './components/ChatPanel'
 import KbManageModal from './components/KbManageModal'
-import KbListModal from './components/KbListModal'
 import LoginPage from './components/LoginPage'
 
 const { Sider, Content } = Layout
@@ -15,7 +14,6 @@ function AppInner() {
   const chat = useChat()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [sessionTitle, setSessionTitle] = useState('新对话')
-  const [kbListOpen, setKbListOpen] = useState(false)
   const [kbManageOpen, setKbManageOpen] = useState(false)
 
   // Sync header title when conversation changes
@@ -63,14 +61,11 @@ function AppInner() {
             currentTool={chat.currentTool ?? null}
             uploadedFiles={chat.uploadedFiles ?? []}
             onSendChat={chat.sendChat}
-            onUploadFile={chat.uploadFile}
             onRemoveUploadedFile={chat.removeUploadedFile}
-            onOpenKbList={() => setKbListOpen(true)}
           />
         </Content>
       </Layout>
 
-      <KbListModal open={kbListOpen} onClose={() => setKbListOpen(false)} />
       <KbManageModal open={kbManageOpen} onClose={() => setKbManageOpen(false)} />
     </Layout>
   )
