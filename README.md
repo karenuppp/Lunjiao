@@ -51,7 +51,7 @@ Lunjiao/
 │   │   │   ├── ChatPanel.tsx         # 主对话区 (SSE 流式渲染)
 │   │   │   ├── AnalysisPanel.tsx     # 右侧分析面板
 │   │   │   ├── DataSourceModal.tsx   # 数据源管理弹窗
-│   │   │   └── KbListModal.tsx       # 知识库列表弹窗
+│   │   │   └── KbManagePage.tsx      # 知识库管理页面 (上传 + 文件列表)
 │   │   ├── App.tsx          # 三栏式布局 (侧边栏 + 主对话区 + 分析面板)
 │   │   └── main.tsx         # 入口
 │   ├── package.json

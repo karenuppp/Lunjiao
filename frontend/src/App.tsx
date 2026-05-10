@@ -5,7 +5,7 @@ import { ChatProvider, useChat } from './store/chatStore'
 import Sidebar from './components/Sidebar'
 import AppHeader from './components/AppHeader'
 import ChatPanel from './components/ChatPanel'
-import KbManageModal from './components/KbManageModal'
+import KbManagePage from './components/KbManagePage'
 import LoginPage from './components/LoginPage'
 
 const { Sider, Content } = Layout
@@ -66,7 +66,7 @@ function AppInner() {
         </Content>
       </Layout>
 
-      <KbManageModal open={kbManageOpen} onClose={() => setKbManageOpen(false)} />
+      <KbManagePage open={kbManageOpen} onClose={() => setKbManageOpen(false)} />
     </Layout>
   )
 }
