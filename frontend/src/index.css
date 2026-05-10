@@ -133,12 +133,21 @@ html, body {
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08);
 }
 
+/* Send button — absolute bottom-right of input wrapper */
+.input-wrapper .send-btn {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  padding: 5px 16px;
+  z-index: 2;
+}
+
 .input-wrapper textarea {
   width: 100%;
   border: none;
   outline: none;
   resize: none;
-  padding: 12px 16px;
+  padding: 12px 70px 12px 16px;
   font-size: 14px;
   line-height: 1.5;
   background: transparent;

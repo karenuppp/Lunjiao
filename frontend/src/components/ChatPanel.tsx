@@ -150,14 +150,10 @@ export default function ChatPanel({
           </div>
         )}
 
-        {/* Input */}
+        {/* Input + send */}
         <div className="input-wrapper">
           <textarea ref={textareaRef} placeholder="直接提问，系统将自动检索知识库与数据库…"
             value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} rows={1} disabled={isLoading} />
-        </div>
-
-        {/* Controls — send */}
-        <div className="input-controls">
           <button className={`send-btn ${canSend ? 'active' : ''}`} onClick={handleSend} disabled={!canSend}>
             发送 ↵
           </button>
