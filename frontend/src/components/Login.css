@@ -2,7 +2,8 @@
    Login Page — "Refined Institutional Portal"
    Coordinates with the existing Lunjiao design language:
    - Navy sidebar (#1a1b2e) → full-page background
-   - Indigo primary (#6366f1 / #4d6de6) → interactive accent
+   - Indigo primary (#4F46E5) → interactive accent
+   - Violet secondary (#7C3AED) → gradient CTA
    - Light gray (#f7f8fa) → card surface
    - Same font stack and border-radius tokens as App.css
    ============================================================ */
@@ -75,13 +76,13 @@
   width: 56px;
   height: 56px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #4d6de6 0%, #6366f1 100%);
+  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
   color: #ffffff;
   font-size: 28px;
   font-weight: 700;
   letter-spacing: 0;
   margin-bottom: 16px;
-  box-shadow: 0 4px 16px rgba(77,109,230,0.3);
+  box-shadow: 0 4px 16px rgba(79,70,229,0.3);
 }
 
 .login-brand-name {
@@ -89,14 +90,13 @@
   font-size: 26px;
   font-weight: 700;
   color: #1a1b2e;
-  letter-spacing: 2px;
+  letter-spacing: 1px;
 }
 
 .login-brand-sub {
   margin: 8px 0 0;
   font-size: 13px;
   color: #9ca3af;
-  letter-spacing: 1px;
 }
 
 /* ── Form ────────────────────────────────────────────────── */
@@ -137,9 +137,9 @@
 }
 
 .login-input:focus {
-  border-color: #6366f1;
+  border-color: #4F46E5;
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(99,102,241,0.08);
+  box-shadow: 0 0 0 3px rgba(79,102,241,0.08);
 }
 
 /* ── Error message ───────────────────────────────────────── */
@@ -166,11 +166,11 @@
   margin-top: 4px;
   border: none;
   border-radius: 10px;
-  background: #4d6de6;
+  background: #4F46E5;
   color: #ffffff;
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: 3px;
+  letter-spacing: 1px;
   cursor: pointer;
   transition: all 0.15s ease;
   font-family: inherit;
@@ -179,14 +179,14 @@
 }
 
 .login-btn:hover {
-  background: #3b5bd1;
+  background: #4338CA;
   transform: translateY(-1px);
-  box-shadow: 0 4px 14px rgba(77,109,230,0.35);
+  box-shadow: 0 4px 14px rgba(79,70,229,0.35);
 }
 
 .login-btn:active {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(77,109,230,0.25);
+  box-shadow: 0 2px 8px rgba(79,70,229,0.25);
 }
 
 .login-btn:disabled {
@@ -196,7 +196,7 @@
 }
 
 .login-btn--loading {
-  background: #7c8ef0;
+  background: #7C3AED;
 }
 
 /* ── Button spinner ──────────────────────────────────────── */

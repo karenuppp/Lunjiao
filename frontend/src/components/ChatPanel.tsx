@@ -1,6 +1,7 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { MessageSquare, User, Sparkles, Loader2, X, SendHorizontal, FileText, Table2, Presentation, Archive, Image as ImageIcon, FileType } from 'lucide-react'
 import './chat.css'
 
 interface Message {
@@ -10,41 +11,127 @@ interface Message {
   data_sources_used?: string[]
 }
 
+interface ContextFile {
+  id: string
+  name: string
+  size: number
+}
+
 interface ChatPanelProps {
   messages: Message[]
   isLoading: boolean
   currentTool: string | null
-  uploadedFiles: UploadedFileMeta[]
-  onSendChat: (message: string) => void
-  onRemoveUploadedFile: (fileId: string) => void
+  onSendChat: (message: string, contextFiles?: ContextFile[]) => void
+}
+
+// ---- Helpers ----
+
+let fileIdCounter = 0
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/** File type → { icon, colorClass } */
+function getFileTypeMeta(filename: string) {
+  const ext = filename.split('.').pop()?.toLowerCase() ?? ''
+  switch (ext) {
+    case 'pdf':   return { icon: <FileText size={14} />,     colorClass: 'file-red' }
+    case 'docx':
+    case 'doc':   return { icon: <FileType size={14} />,     colorClass: 'file-blue' }
+    case 'xlsx':
+    case 'xls':
+    case 'csv':   return { icon: <Table2 size={14} />,       colorClass: 'file-green' }
+    case 'pptx':  return { icon: <Presentation size={14} />, colorClass: 'file-orange' }
+    case 'zip':
+    case 'rar':
+    case '7z':    return { icon: <Archive size={14} />,      colorClass: 'file-purple' }
+    case 'png':
+    case 'jpg':
+    case 'jpeg':  return { icon: <ImageIcon size={14} />,    colorClass: 'file-pink' }
+    default:      return { icon: <FileText size={14} />,     colorClass: 'file-gray' }
+  }
 }
 
 export default function ChatPanel({
-  messages, isLoading,  currentTool, uploadedFiles,
-  onSendChat, onRemoveUploadedFile,
+  messages, isLoading, currentTool,
+  onSendChat,
 }: ChatPanelProps) {
   const [input, setInput] = useState('')
+  const [contextFiles, setContextFiles] = useState<ContextFile[]>([])
+  const [dragOver, setDragOver] = useState(false)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  // Auto scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isLoading])
 
+  // Auto resize textarea
   useEffect(() => {
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+    el.style.height = el.scrollHeight + 'px'
   }, [input])
 
-  const canSend = input.trim().length > 0 && !isLoading
+  const canSend = (input.trim().length > 0 || contextFiles.length > 0) && !isLoading
 
-  // ---- Handlers ----
+  // ---- Drag & Drop handlers ----
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(true)
+  }, [])
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }, [])
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Only set false if we're leaving the container
+    const target = e.currentTarget as HTMLElement
+    const related = e.relatedTarget as HTMLElement | null
+    if (!related || !target.contains(related)) {
+      setDragOver(false)
+    }
+  }, [])
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragOver(false)
+
+    const files = e.dataTransfer.files
+    if (!files || files.length === 0) return
+
+    setContextFiles(prev => {
+      const next = [...prev]
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i]
+        next.push({ id: `cf-${++fileIdCounter}`, name: f.name, size: f.size })
+      }
+      return next
+    })
+  }, [])
+
+  const removeContextFile = useCallback((fileId: string) => {
+    setContextFiles(prev => prev.filter(f => f.id !== fileId))
+  }, [])
+
+  // ---- Send ----
   const handleSend = () => {
     if (!canSend) return
-    onSendChat(input.trim())
+    onSendChat(input.trim(), contextFiles.length > 0 ? contextFiles : undefined)
     setInput('')
+    setContextFiles([])
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -54,26 +141,24 @@ export default function ChatPanel({
     }
   }
 
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-  }
-
   // ---- Render ----
   return (
     <div className="chat-area">
-      {/* Message area */}
       <div className="chat-messages">
         {messages.length === 0 && !isLoading ? (
           <div className="chat-empty">
-            <div style={{ fontSize: 48, marginBottom: 20, opacity: 0.6 }}>💬</div>
-            <p style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 500, color: '#1a1b2e' }}>
+            <MessageSquare size={56} strokeWidth={1.2} className="empty-icon" style={{ color: '#C7D2FE', marginBottom: '16px' }} />
+            <p style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 600, color: '#0F172A', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
               今天想查点什么？
             </p>
-            <p style={{ margin: '0 0 24px', fontSize: 14, color: '#9ca3af' }}>
-              直接提问即可，系统将自动检索知识库与数据库获取答案
+            <p style={{ margin: '0 0 32px', fontSize: 14, color: '#9CA3AF' }}>
+              直接提问或拖拽文件作为上下文，系统将自动检索知识库与数据库获取答案
             </p>
+
+            <div className="suggestion-chips">
+              <button onClick={() => { setInput('部门考勤制度有哪些？'); textareaRef.current?.focus(); }}>部门考勤制度有哪些？</button>
+              <button onClick={() => { setInput('如何申请年假？'); textareaRef.current?.focus(); }}>如何申请年假？</button>
+            </div>
           </div>
         ) : (
           <>
@@ -83,38 +168,37 @@ export default function ChatPanel({
               return (
               <div key={msg.id} className={`message ${msg.role}`}>
                 <div className="message-avatar">
-                  {msg.role === 'user' ? '👤' : '🦌'}
+                  {msg.role === 'user' ? (
+                    <User size={16} strokeWidth={2} />
+                  ) : (
+                    <Sparkles size={16} strokeWidth={2} />
+                  )}
                 </div>
+
                 <div className="message-body">
-                  {msg.role === 'assistant' && msg.data_sources_used?.length > 0 && !showLoadingBubble && (
+                  {msg.role === 'assistant' && (msg.data_sources_used?.length ?? 0) > 0 && !showLoadingBubble && (
                     <div className="data-source-tags">
-                      {msg.data_sources_used.map((src, i) => (
-                        <span key={i} className="data-source-tag">
-                          {src}
-                        </span>
+                      {msg.data_sources_used!.map((src, i) => (
+                        <span key={i} className="data-source-tag">{src}</span>
                       ))}
                     </div>
                   )}
                   {showLoadingBubble && currentTool && (
-                    <div className="data-source-tags">
-                      <span className="data-source-tag">{currentTool}</span>
+                    <div className="tool-call-indicator">
+                      <Loader2 size={14} className="progress-spinner" />
+                      <span>{currentTool}</span>
                     </div>
                   )}
+
                   <div className={`message-bubble ${msg.role}`}>
                     {msg.role === 'user' ? (
                       <p style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{msg.content}</p>
                     ) : showLoadingBubble ? (
-                      <div className="loading-bubble" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        {msg.content ? (
-                          <>
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                              {msg.content}
-                            </ReactMarkdown>
-                          </>
-                        ) : null}
-                        <span className="loading-dot" />
-                        <span className="loading-dot" />
-                        <span className="loading-dot" />
+                      <div className="loading-cursor-area">
+                        {msg.content && (
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
+                        )}
+                        <span className="loading-cursor" />
                       </div>
                     ) : (
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -126,36 +210,54 @@ export default function ChatPanel({
               </div>
               )
             })}
-
             <div ref={messagesEndRef} />
           </>
         )}
       </div>
 
-      {/* ========== Input area ========== */}
-      <div className="chat-input-area">
-        {/* Uploaded files */}
-        {uploadedFiles.length > 0 && (
-          <div className="uploaded-files-list">
-            {uploadedFiles.map((f) => (
-              <div key={f.fileId} className="uploaded-file-chip">
-                <span className="file-name" title={f.fileName}>{f.fileName}</span>
-                <span style={{ fontSize: 10, color: f.ragStatus === 'indexed' ? '#22c55e' : '#ca8a04', padding: '1px 6px', borderRadius: 3, background: f.ragStatus === 'indexed' ? '#dcfce7' : '#fef9c3' }}>
-                  {f.ragStatus === 'indexed' ? '已索引' : '索引中'}
-                </span>
-                <span style={{ color: '#9ca3af', fontSize: 10 }}>{formatFileSize(f.fileSize)}</span>
-                <button className="remove-btn" onClick={() => onRemoveUploadedFile(f.fileId)}>×</button>
-              </div>
-            ))}
+      <div
+        className={`chat-input-area ${dragOver ? 'drag-over' : ''}`}
+        onDragEnter={handleDragEnter}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        {contextFiles.length > 0 && (
+          <div className="context-files-bar">
+            {contextFiles.map((cf) => {
+              const meta = getFileTypeMeta(cf.name)
+              return (
+                <div key={cf.id} className={`context-file-chip ${meta.colorClass}`}>
+                  <div className="cf-icon">{meta.icon}</div>
+                  <span className="cf-name" title={cf.name}>{cf.name}</span>
+                  <span className="cf-size">{formatFileSize(cf.size)}</span>
+                  <button className="cf-remove" onClick={() => removeContextFile(cf.id)} title="移除">
+                    <X size={12} />
+                  </button>
+                </div>
+              )
+            })}
           </div>
         )}
 
-        {/* Input + send */}
         <div className="input-wrapper">
-          <textarea ref={textareaRef} placeholder="直接提问，系统将自动检索知识库与数据库…"
-            value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={handleKeyDown} rows={1} disabled={isLoading} />
-          <button className={`send-btn ${canSend ? 'active' : ''}`} onClick={handleSend} disabled={!canSend}>
-            发送 ↵
+          <textarea
+            ref={textareaRef}
+            placeholder={contextFiles.length > 0 ? '输入问题…' : '直接提问或拖拽文件作为上下文，系统将自动检索知识库…'}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            rows={1}
+            disabled={isLoading}
+          />
+          <button
+            className={`send-btn ${canSend ? 'active' : ''}`}
+            onClick={handleSend}
+            disabled={!canSend}
+          >
+            {canSend ? (
+              <><SendHorizontal size={14} style={{ marginRight: 4 }} />发送</>
+            ) : '发送'}
           </button>
         </div>
       </div>

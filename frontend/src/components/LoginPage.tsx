@@ -5,14 +5,17 @@
  * Deep navy full-screen background mirrors the sidebar, creating a sense of
  * entering a secure workspace. The centered white card provides a clear
  * visual anchor with the brand name as a refined typographic statement.
+ *
+ * New: login is handled through chatStore — onLogin receives account+password
+ * and returns a Promise. Navigation is handled by the caller (App.tsx).
  */
 
 import { useState } from 'react'
-import { loginUser } from '../api/chat'
+import type { UserInfo } from '../types/chat'
 import './Login.css'
 
 interface LoginPageProps {
-  onLogin: (userId: string) => void
+  onLogin: (account: string, password: string) => Promise<UserInfo>
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
@@ -36,19 +39,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setLoading(true)
 
     try {
-      const result = await loginUser(account.trim(), password.trim())
-
-      if (!result.ok) {
-        setError(result.error || '登录失败')
-        setLoading(false)
-        return
-      }
-
-      // 登录成功 — 存储 user_id
-      localStorage.setItem('lunjiao_user_id', result.user_id || account.trim())
-      onLogin(result.user_id || account.trim())
-    } catch {
-      setError('网络错误，请检查后端服务是否启动')
+      await onLogin(account.trim(), password.trim())
+      // Navigation handled by caller (App.tsx) after successful login
+    } catch (err: any) {
+      setError(err.message || '登录失败，请检查账号和密码')
     } finally {
       setLoading(false)
     }

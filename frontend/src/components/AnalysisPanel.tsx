@@ -18,7 +18,7 @@ import {
   TableOutlined,
 } from '@ant-design/icons'
 
-const { Text, Title } = Typography
+const { Text } = Typography
 
 interface AnalysisPanelProps {
   onClose: () => void
@@ -182,7 +182,7 @@ export default function AnalysisPanel({ onClose }: AnalysisPanelProps) {
         height: '100vh',
       }}
     >
-      {/* Header */}
+      {}
       <div
         style={{
           display: 'flex',
