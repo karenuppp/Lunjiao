@@ -14,6 +14,7 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api
 export async function loginUser(account: string, password: string): Promise<{
   ok: boolean
   user_id?: string
+  role?: string
   error?: string
 }> {
   const res = await fetch(`${BASE_URL}/auth/login`, {
@@ -226,4 +227,58 @@ export async function uploadFilesBatchWithUser(
 export function isArchiveFile(filename: string): boolean {
   const ext = filename.toLowerCase()
   return ext.endsWith('.zip') || ext.endsWith('.rar') || ext.endsWith('.7z') || ext.endsWith('.tar.gz') || ext.endsWith('.tgz')
+}
+
+// ============================================================
+// User Management API (admin)
+// ============================================================
+
+export interface UserRecord {
+  id: number
+  account: string
+  role: string
+}
+
+/** List all users (admin only). Returns 403 if caller is not admin. */
+export async function listUsers(): Promise<UserRecord[]> {
+  const userId = localStorage.getItem('lunjiao_user_id') || ''
+  const res = await fetch(`${BASE_URL}/auth/users?user_id=${encodeURIComponent(userId)}`)
+  if (res.status === 403) throw new Error('无权限访问')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+/** Create a new user (admin only). */
+export async function createUser(account: string, password: string, role: string): Promise<void> {
+  const userId = localStorage.getItem('lunjiao_user_id') || ''
+  const res = await fetch(`${BASE_URL}/auth/users?user_id=${encodeURIComponent(userId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ account, password, role }),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as any).detail || `HTTP ${res.status}`)
+  }
+}
+
+/** Delete a user by id (admin only). */
+export async function deleteUser(userId: number): Promise<void> {
+  const callerId = localStorage.getItem('lunjiao_user_id') || ''
+  const res = await fetch(`${BASE_URL}/auth/users/${userId}?caller_id=${encodeURIComponent(callerId)}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+}
+
+/** Change user password (admin only). */
+export async function changeUserPassword(userId: number, newPassword: string): Promise<void> {
+  const callerId = localStorage.getItem('lunjiao_user_id') || ''
+  const res = await fetch(`${BASE_URL}/auth/users/${userId}/change-password?caller_id=${encodeURIComponent(callerId)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ new_password: newPassword }),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as any).detail || `HTTP ${res.status}`)
+  }
 }

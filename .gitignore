@@ -20,6 +20,13 @@ frontend/dist/
 *.swp
 *.swo
 
+# AI / Editor hidden folders
+.changeset/
+.codex/
+.cursor/
+.windsurfrules/
+.hermes/
+
 # OS
 .DS_Store
 Thumbs.db

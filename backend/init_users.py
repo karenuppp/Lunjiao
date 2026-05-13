@@ -38,7 +38,8 @@ def get_engine():
 def main():
     parser = argparse.ArgumentParser(description="初始化 Lunjiao 用户表")
     parser.add_argument("--account", default="193699", help="测试账号 (默认: 193699)")
-    parser.add_argument("--password", default="193699", help="测试密码 (默认: 193699")
+    parser.add_argument("--password", default="193699", help="测试密码 (默认: 193699)")
+    parser.add_argument("--role", default="admin", help="角色 (默认: admin)")
     args = parser.parse_args()
 
     from app.models.user import Base, User
@@ -55,10 +56,10 @@ def main():
         if existing:
             print(f"⚠️  账号 '{args.account}' 已存在 (id={existing.id})，跳过插入")
         else:
-            user = User(account=args.account, password=args.password)
+            user = User(account=args.account, password=args.password, role=args.role)
             session.add(user)
             session.commit()
-            print(f"✅ 已插入测试账号: 账号={args.account}, 密码={args.password} (id={user.id})")
+            print(f"✅ 已插入账号: {args.account}, 角色: {args.role} (id={user.id})")
 
     # 3. 验证
     with Session(engine) as session:

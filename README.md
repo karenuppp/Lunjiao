@@ -6,14 +6,30 @@
 
 | 层 | 技术 |
 |---|---|
-| 前端 | React 18 + TypeScript + Ant Design 5 + Vite |
+| 前端 | React 18 + TypeScript + Ant Design 5 + Vite + react-router-dom |
 | 后端 API | Python 3.11 + FastAPI (SSE 流式输出) |
 | Agent | 原生 OpenAI SDK — ReAct 循环 + Function Calling（无 LangChain/LangGraph） |
 | LLM | qwen3.6-35B-A3B-apex，本地 LM Studio (`localhost:1234/v1`) |
 | Embedding | text-embedding-nomic-embed-text-v1.7 (768 维) |
 | RAG 引擎 | RAG-Anything + LightRAG — MinerU PDF 解析、向量检索（naive 模式，无 KG 实体抽取） |
 | MCP 数据查询 | MCP Server — MySQL 只读查询 (端口 8024) / 上传文件查询 (端口 8025) |
-| 数据存储 | React useReducer + localStorage 持久化 (对话在内存)；MySQL (后端) |
+| 数据存储 | Zustand + localStorage 持久化；MySQL (后端) |
+
+## 页面路由与导航
+
+```
+/          → 登录页（未认证时所有页面重定向至此）
+/chat      → AI 智能问答（所有已认证用户）
+/knowledge-base → 知识库管理（所有已认证用户）
+/admin/users    → 用户管理（仅管理员）
+```
+
+登录后进入 `/chat`，顶部统一导航栏包含：
+- **AI 智能问答** — ReAct Agent 对话 + SSE 流式输出
+- **知识库管理** — 文档上传、RAG 索引、文件列表管理
+- **用户管理** （仅管理员可见）— 新增/删除/改密用户账号，设置角色
+
+右上角为退出按钮（带框体样式），点击清除认证状态并返回登录页。
 
 ## Agent 架构
 
@@ -42,16 +58,17 @@
 Lunjiao/
 ├── frontend/                # React 应用 (Vite)
 │   ├── src/
-│   │   ├── api/chat.ts      # API 客户端 (对话 SSE + 文件上传)
-│   │   ├── store/chatStore.tsx  # useReducer 状态管理 + localStorage 持久化
+│   │   ├── api/chat.ts      # API 客户端 (对话 SSE + 文件上传 + 用户管理)
+│   │   ├── store/chatStore.tsx  # Zustand 状态管理 + localStorage 持久化
 │   │   ├── types/chat.ts    # TypeScript 类型定义
 │   │   ├── components/
-│   │   │   ├── Sidebar.tsx           # 侧边栏 (历史对话、数据源入口)
-│   │   │   ├── AppHeader.tsx         # 顶部工具栏
-│   │   │   ├── ChatPanel.tsx         # 主对话区 (SSE 流式渲染)
+│   │   │   ├── LoginPage.tsx         # 登录页 (账号密码认证)
+│   │   │   ├── Sidebar.tsx           # 侧边栏 (历史对话)
+│   │   │   ├── AppHeader.tsx         # 统一顶部导航 (标签 + 退出按钮)
+│   │   │   ├── ChatPanel.tsx         # AI 智能问答面板 (SSE 流式渲染)
 │   │   │   ├── AnalysisPanel.tsx     # 右侧分析面板
-│   │   │   ├── DataSourceModal.tsx   # 数据源管理弹窗
-│   │   │   └── KbManagePage.tsx      # 知识库管理页面 (上传 + 文件列表)
+│   │   │   └── KbManagePage.tsx      # 知识库管理页 (上传 + 文件列表表格)
+│   │   │   └── UserManagePage.tsx    # 用户管理页 (管理员: 新增/删除/改密)
 │   │   ├── App.tsx          # 三栏式布局 (侧边栏 + 主对话区 + 分析面板)
 │   │   └── main.tsx         # 入口
 │   ├── package.json
@@ -65,7 +82,7 @@ Lunjiao/
 │   │   │                        · .txt/.md/.csv/.xlsx 直接文本提取（绕过 MinerU）
 │   │   │                        · LightRAG naive 向量检索 (无 KG)
 │   │   ├── api/             # API 路由
-│   │   │   ├── chat.py      # /api/chat/stream — SSE 流式对话
+│   │   │   ├── chat.py      # /api/chat/stream — SSE 流式对话 + /api/auth — 用户认证 CRUD
 │   │   │   ├── upload.py    # /api/upload — 文件上传 + RAG 索引
 │   │   │   ├── data_sources.py # 数据源管理 CRUD
 │   │   │   └── history.py   # 历史记录 (内存)

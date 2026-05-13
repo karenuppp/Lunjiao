@@ -36,6 +36,7 @@ export interface ChatRequest {
   data_sources?: string[]
   response_mode?: 'text' | 'chart' | 'all'
   history?: Array<{ role: string; content: string }>
+  user_id?: string
 }
 
 export interface ChatResponse {
@@ -90,6 +91,12 @@ export interface DataSource {
 // ============================================================
 // UI State Types
 // ============================================================
+
+/** User info from login */
+export interface UserInfo {
+  user_id: string
+  role: 'admin' | 'user'
+}
 
 export type DataCategory = '全部' | '人事数据' | '设备数据' | '财务数据'
 

@@ -4,12 +4,11 @@ import {
   useReducer,
   useCallback,
   useRef,
-  useMemo,
   useEffect,
   type ReactNode,
 } from 'react'
-import type { DataCategory, PendingFile, UploadProgressItem, AppView } from '../types/chat'
-import { sendChatStream, isArchiveFile, uploadFilesBatchWithUser } from '../api/chat'
+import type { DataCategory, PendingFile, UploadProgressItem, AppView, UserInfo, Message as ChatMessage } from '../types/chat'
+import { sendChatStream, isArchiveFile, uploadFilesBatchWithUser, loginUser } from '../api/chat'
 
 // ============================================================
 // Persist conversations to localStorage
@@ -63,6 +62,10 @@ interface ChatState {
   pendingFiles: PendingFile[]
   uploadProgress: UploadProgressItem[]
   isUploading: boolean
+  // Auth
+  loggedIn: boolean
+  userId: string
+  role: string
 }
 
 interface UploadedFileMeta {
@@ -83,6 +86,9 @@ const initialState: ChatState = {
   pendingFiles: [],
   uploadProgress: [],
   isUploading: false,
+  loggedIn: false,
+  userId: '',
+  role: '',
 }
 
 // Merge persisted data into initial state
@@ -118,6 +124,8 @@ type ChatAction =
   | { type: 'SET_UPLOADING'; payload: boolean }
   | { type: 'UPDATE_UPLOAD_PROGRESS'; payload: UploadProgressItem[] }
   | { type: 'CLEAR_UPLOAD_PROGRESS' }
+  | { type: 'LOGIN'; payload: { userId: string; role: string } }
+  | { type: 'LOGOUT' }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -259,6 +267,12 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'CLEAR_UPLOAD_PROGRESS':
       return { ...state, uploadProgress: [] }
 
+    case 'LOGIN':
+      return { ...state, loggedIn: true, userId: action.payload.userId, role: action.payload.role }
+
+    case 'LOGOUT':
+      return { ...state, loggedIn: false, userId: '', role: '' }
+
     default:
       return state
   }
@@ -284,6 +298,8 @@ interface ChatContextValue {
   clearPendingFiles: () => void
   clearUploadProgress: () => void
   confirmUpload: () => Promise<void>
+  login: (account: string, password: string) => Promise<UserInfo>
+  logout: () => void
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null)
@@ -592,6 +608,29 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  // ---- Logout ----
+  const logout = useCallback(() => {
+    localStorage.removeItem('lunjiao_user_id')
+    localStorage.removeItem('lunjiao_role')
+    // Abort any in-flight streaming
+    if (abortRef.current) abortRef.current()
+    dispatch({ type: 'LOGOUT' })
+  }, [])
+
+  // ---- Login ----
+  const login = useCallback(async (account: string, password: string): Promise<UserInfo> => {
+    const res = await loginUser(account, password)
+    if (!res.ok) {
+      throw new Error(res.error || '登录失败')
+    }
+    const userId = res.user_id || account
+    const role = res.role || 'user'
+    localStorage.setItem('lunjiao_user_id', userId)
+    localStorage.setItem('lunjiao_role', role)
+    dispatch({ type: 'LOGIN', payload: { userId, role } })
+    return { user_id: userId, role: role as 'admin' | 'user' }
+  }, [])
+
   // ---- Computed values (accessed via hook) ----
   const value: ChatContextValue = {
     state,
@@ -609,6 +648,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     clearPendingFiles,
     clearUploadProgress,
     confirmUpload,
+    login,
+    logout,
   }
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
@@ -634,6 +675,8 @@ export function useChat() {
     pendingFiles: ctx.state.pendingFiles,
     uploadProgress: ctx.state.uploadProgress,
     isUploading: ctx.state.isUploading,
+    loggedIn: ctx.state.loggedIn,
+    role: ctx.state.role,
     // Actions
     sendChat: ctx.sendChat,
     newConversation: ctx.newConversation,
@@ -648,5 +691,7 @@ export function useChat() {
     clearPendingFiles: ctx.clearPendingFiles,
     clearUploadProgress: ctx.clearUploadProgress,
     confirmUpload: ctx.confirmUpload,
+    login: ctx.login,
+    logout: ctx.logout,
   }
 }
