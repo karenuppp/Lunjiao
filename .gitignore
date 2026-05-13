@@ -27,6 +27,9 @@ frontend/dist/
 .windsurfrules/
 .hermes/
 
+# Docs (not source code)
+docs/
+
 # OS
 .DS_Store
 Thumbs.db
