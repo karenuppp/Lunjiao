@@ -6,12 +6,15 @@ Two-step flow:
   2. Backend indexes the file using RAGAnything (async)
 
 Supported formats: PDF, DOCX, XLSX, TXT, CSV, MD (parsed by RAGAnything)
+Archives (.zip, .tar.gz, .tgz, .rar, .7z) are auto-extracted and child files indexed individually.
 """
 
 import os
 import uuid
 import json
 import asyncio
+import shutil
+import tempfile
 from pathlib import Path
 from datetime import datetime
 from typing import Optional
@@ -35,6 +38,8 @@ class UploadResponse(BaseModel):
     rag_status: str  # "indexed" | "pending" | "failed"
     chunk_count: int = 0
     user_id: str = "default"
+    is_archive: bool = False
+    extracted_files: list[dict] = []  # [{name, status, error?}] for archives
 
 
 class UploadListResponse(BaseModel):
@@ -105,7 +110,8 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
                                datetime.fromtimestamp(fpath.stat().st_mtime).isoformat())
         file_user_id = meta.get("user_id", "default")
 
-        rag_status = "indexed"
+        rag_status = meta.get("rag_status", "indexed")  # default indexed for legacy files without status in meta
+        chunk_count = meta.get("chunk_count", 0)
 
         rebuilt[file_id] = UploadResponse(
             file_id=file_id,
@@ -115,6 +121,7 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
             category=category,
             uploaded_at=uploaded_at,
             rag_status=rag_status,
+            chunk_count=chunk_count,
             user_id=file_user_id,
         )
 
@@ -138,6 +145,128 @@ async def _index_file_local(file_id: str, file_path: str, file_name: str, catego
         return "failed", 0
 
 
+def _update_meta_rag_status(save_path: Path, rag_status: str, chunk_count: int = 0) -> None:
+    """Update the .meta companion file with the final indexing status."""
+    meta_path = save_path.parent / f"{save_path.stem}.meta"
+    try:
+        if meta_path.exists():
+            with open(meta_path, "r", encoding="utf-8") as f:
+                meta = json.load(f)
+        else:
+            meta = {}
+        meta["rag_status"] = rag_status
+        meta["chunk_count"] = chunk_count
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False)
+    except Exception:
+        pass
+
+
+# ---- Archive Extraction Helpers ----
+
+ARCHIVE_EXTENSIONS = {".zip", ".rar", ".7z", ".tar.gz", ".tgz"}
+
+
+def _is_archive(filename: str) -> bool:
+    """Check if filename has an archive extension."""
+    lower = filename.lower()
+    return any(lower.endswith(ext) for ext in ARCHIVE_EXTENSIONS)
+
+
+def _extract_archive(file_path: str, extract_dir: str) -> list[str]:
+    """Extract an archive to a directory. Returns list of extracted file paths.
+
+    Supports zip (built-in), tar.gz/tgz (built-in), rar (rarfile), 7z (py7zr).
+    Raises RuntimeError with a user-friendly message on failure.
+    """
+    lower = Path(file_path).name.lower()
+    extracted: list[str] = []
+
+    # --- .zip (Python built-in) ---
+    if lower.endswith(".zip"):
+        import zipfile
+        try:
+            with zipfile.ZipFile(file_path, "r") as zf:
+                for member in zf.namelist():
+                    # Skip directories and macOS metadata
+                    if member.endswith("/") or "__MACOSX" in member or member.startswith("."):
+                        continue
+                    # Flatten: extract to extract_dir, use basename to avoid path traversal
+                    target_name = Path(member).name
+                    if not target_name:
+                        continue
+                    target_path = os.path.join(extract_dir, target_name)
+                    with zf.open(member) as src, open(target_path, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                    extracted.append(target_path)
+            return extracted
+        except Exception as e:
+            raise RuntimeError(f"ZIP 解压失败: {e}")
+
+    # --- .tar.gz / .tgz (Python built-in) ---
+    if lower.endswith(".tar.gz") or lower.endswith(".tgz"):
+        import tarfile
+        try:
+            with tarfile.open(file_path, "r:gz") as tf:
+                for member in tf.getmembers():
+                    if not member.isfile():
+                        continue
+                    target_name = Path(member.name).name
+                    if not target_name or target_name.startswith("."):
+                        continue
+                    target_path = os.path.join(extract_dir, target_name)
+                    with tf.extractfile(member) as src, open(target_path, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                    extracted.append(target_path)
+            return extracted
+        except Exception as e:
+            raise RuntimeError(f"TAR.GZ 解压失败: {e}")
+
+    # --- .rar (requires rarfile + unrar) ---
+    if lower.endswith(".rar"):
+        try:
+            import rarfile
+        except ImportError:
+            raise RuntimeError(
+                "RAR 解压需要 rarfile 库，请运行: pip install rarfile"
+            )
+        try:
+            with rarfile.RarFile(file_path, "r") as rf:
+                for member in rf.namelist():
+                    target_name = Path(member).name
+                    if not target_name or target_name.startswith("."):
+                        continue
+                    target_path = os.path.join(extract_dir, target_name)
+                    with rf.open(member) as src, open(target_path, "wb") as dst:
+                        shutil.copyfileobj(src, dst)
+                    extracted.append(target_path)
+            return extracted
+        except Exception as e:
+            raise RuntimeError(f"RAR 解压失败: {e}")
+
+    # --- .7z (requires py7zr) ---
+    if lower.endswith(".7z"):
+        try:
+            import py7zr
+        except ImportError:
+            raise RuntimeError(
+                "7z 解压需要 py7zr 库，请运行: pip install py7zr"
+            )
+        try:
+            with py7zr.SevenZipFile(file_path, "r") as szf:
+                szf.extractall(extract_dir)
+                extracted = [
+                    os.path.join(extract_dir, f)
+                    for f in os.listdir(extract_dir)
+                    if os.path.isfile(os.path.join(extract_dir, f))
+                ]
+            return extracted
+        except Exception as e:
+            raise RuntimeError(f"7Z 解压失败: {e}")
+
+    raise RuntimeError(f"不支持的压缩格式: {Path(file_path).suffix}")
+
+
 def _validate_file_type(filename: str, allowed: list[str]) -> str:
     """Validate that filename has an allowed extension. Returns the extension."""
     ext = Path(filename).suffix.lower()
@@ -157,7 +286,12 @@ async def _process_single_file(
     allowed_extensions: list[str],
     user_id: str = "default",
 ) -> UploadResponse:
-    """Save a single file to disk, write .meta, trigger async RAG indexing, and return response."""
+    """Save a single file to disk, write .meta, trigger async RAG indexing, and return response.
+
+    For archives (.zip/.rar/.7z/.tar.gz/.tgz): extracts to a temp directory, then
+    indexes each extracted file individually. Extracted files must match allowed_extensions
+    (excluding archive formats themselves).
+    """
     ext = _validate_file_type(filename, allowed_extensions)
     file_size = len(content)
 
@@ -190,6 +324,102 @@ async def _process_single_file(
     except Exception:
         pass
 
+    # ── Archive handling ──
+    if _is_archive(filename):
+        # Build list of non-archive allowed extensions for extracted files
+        child_allowed = [e for e in allowed_extensions if e not in ARCHIVE_EXTENSIONS
+                         and not any(e.endswith(ae) for ae in ARCHIVE_EXTENSIONS)]
+
+        extracted_files: list[dict] = []
+        temp_dir = tempfile.mkdtemp(prefix="lunjiao_archive_")
+        try:
+            extracted_paths = _extract_archive(str(save_path), temp_dir)
+        except RuntimeError as e:
+            # Archive extraction failed — clean up and return error
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            # Update .meta file with failed status
+            _update_meta_rag_status(save_path, "failed", 0)
+            return UploadResponse(
+                file_id=file_id,
+                file_name=filename,
+                file_size=file_size,
+                file_type=ext.lstrip("."),
+                category=category,
+                uploaded_at=timestamp,
+                rag_status="failed",
+                user_id=user_id,
+                is_archive=True,
+                extracted_files=[{"name": "解压失败", "status": "error", "error": str(e)}],
+            )
+
+        if not extracted_paths:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            # Update .meta file with failed status
+            _update_meta_rag_status(save_path, "failed", 0)
+            return UploadResponse(
+                file_id=file_id,
+                file_name=filename,
+                file_size=file_size,
+                file_type=ext.lstrip("."),
+                category=category,
+                uploaded_at=timestamp,
+                rag_status="failed",
+                user_id=user_id,
+                is_archive=True,
+                extracted_files=[{"name": "空压缩包", "status": "error", "error": "压缩包内无文件"}],
+            )
+
+        # Index each extracted file
+        total_chunks = 0
+        any_indexed = False
+        for child_path in extracted_paths:
+            child_name = Path(child_path).name
+            child_ext = Path(child_path).suffix.lower()
+            # Check if child file type is allowed
+            if child_ext not in child_allowed:
+                extracted_files.append({
+                    "name": child_name,
+                    "status": "skipped",
+                    "error": f"不支持的文件类型 {child_ext}",
+                })
+                continue
+
+            rag_status, chunk_count = await _index_file_local(
+                file_id, child_path, child_name, category, user_id
+            )
+            total_chunks += chunk_count
+            if rag_status == "indexed":
+                any_indexed = True
+                extracted_files.append({"name": child_name, "status": "done"})
+            else:
+                extracted_files.append({
+                    "name": child_name,
+                    "status": "error",
+                    "error": "索引失败",
+                })
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+        response = UploadResponse(
+            file_id=file_id,
+            file_name=filename,
+            file_size=file_size,
+            file_type=ext.lstrip("."),
+            category=category,
+            uploaded_at=timestamp,
+            rag_status="indexed" if any_indexed else "failed",
+            chunk_count=total_chunks,
+            user_id=user_id,
+            is_archive=True,
+            extracted_files=extracted_files,
+        )
+
+        # Update .meta file with final rag_status
+        _update_meta_rag_status(save_path, response.rag_status, response.chunk_count)
+
+        return response
+
+    # ── Non-archive (regular file) ──
     # Trigger async RAG indexing
     rag_task = asyncio.create_task(
         _index_file_local(file_id, str(save_path), filename, category, user_id)
@@ -213,6 +443,9 @@ async def _process_single_file(
     except asyncio.TimeoutError:
         response.rag_status = "pending"
 
+    # Update .meta file with final rag_status
+    _update_meta_rag_status(save_path, response.rag_status, response.chunk_count)
+
     _indexed_files[file_id] = response
     return response
 
@@ -235,7 +468,8 @@ async def upload_file(
     upload_dir = Path(settings.upload_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
     allowed = settings.allowed_extensions or [
-        ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".csv", ".txt", ".md", ".png", ".jpg", ".jpeg"
+        ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".csv", ".txt", ".md", ".png", ".jpg", ".jpeg",
+        ".zip", ".rar", ".7z", ".tar.gz", ".tgz",
     ]
 
     return await _process_single_file(content, file.filename, category, upload_dir, allowed, user_id)
@@ -258,7 +492,8 @@ async def upload_files_batch(
     upload_dir = Path(settings.upload_dir)
     upload_dir.mkdir(parents=True, exist_ok=True)
     allowed = settings.allowed_extensions or [
-        ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".csv", ".txt", ".md", ".png", ".jpg", ".jpeg"
+        ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".csv", ".txt", ".md", ".png", ".jpg", ".jpeg",
+        ".zip", ".rar", ".7z", ".tar.gz", ".tgz",
     ]
 
     results: list[UploadResponse] = []

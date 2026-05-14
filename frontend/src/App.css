@@ -560,6 +560,32 @@ html, body {
 .progress-desc { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
 .progress-error { font-size: 11px; color: var(--status-error); margin-top: 2px; }
 
+/* --- Archive children within progress items --- */
+.kb-archive-children {
+  margin-top: 6px;
+  margin-left: 26px;
+  padding-left: 10px;
+  border-left: 2px solid #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.kb-child-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #F3F4F6;
+  font-size: 12px;
+}
+.kb-child-item .progress-name {
+  font-size: 12px;
+}
+.kb-child-item .progress-error {
+  font-size: 10px;
+}
+
 /* --- Empty state --- */
 .empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center;

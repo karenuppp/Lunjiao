@@ -34,7 +34,7 @@ class Settings:
     max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "50"))
     allowed_extensions: list[str] = os.getenv(
         "ALLOWED_EXTENSIONS",
-        ".pdf,.docx,.doc,.xlsx,.xls,.pptx,.csv,.txt,.md,.png,.jpg,.jpeg",
+        ".pdf,.docx,.doc,.xlsx,.xls,.pptx,.csv,.txt,.md,.png,.jpg,.jpeg,.zip,.rar,.7z,.tar.gz,.tgz",
     ).split(",")
 
     @property

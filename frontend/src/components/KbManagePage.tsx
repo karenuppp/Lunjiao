@@ -181,6 +181,23 @@ function UploadModalBody({ onDone }: { onDone: () => void }) {
                         </div>
                       )}
                     </div>
+                    {/* Archive children */}
+                    {item.archiveChildren && item.archiveChildren.length > 0 && (
+                      <div className="kb-archive-children">
+                        {item.archiveChildren.map((child, ci) => (
+                          <div key={ci} className={`kb-child-item ${child.status}`}>
+                            <div className="progress-status-icon">
+                              {child.status === 'done' && <CheckCircle2 size={12} className="text-success" />}
+                              {child.status === 'error' && <XCircle size={12} className="text-error" />}
+                            </div>
+                            <div className="progress-info">
+                              <div className="progress-name">{child.name}</div>
+                              {child.error && <div className="progress-error">{child.error}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

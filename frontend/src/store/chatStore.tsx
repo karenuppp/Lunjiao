@@ -564,15 +564,22 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       // Mark each file as done or error based on result
       const updated: UploadProgressItem[] = pending.map((pf) => {
-        const match = result.files.find((f) => f.file_name === pf.name)
+        const match = result.files.find((f: any) => f.file_name === pf.name)
         if (match) {
+          // Use real extracted_files from the API response for archives
+          const archiveChildren = match.is_archive && match.extracted_files?.length
+            ? match.extracted_files.map((ef: any) => ({
+                name: ef.name,
+                status: ef.status === 'done' ? 'done' as const : 'error' as const,
+                error: ef.error,
+              }))
+            : undefined
           return {
             uid: pf.uid,
             name: pf.name,
-            status: 'done',
-            archiveChildren: pf.isArchive
-              ? [{ name: '已解压并索引', status: 'done' }]
-              : undefined,
+            status: match.rag_status === 'indexed' ? 'done' as const : 'error' as const,
+            error: match.rag_status === 'failed' ? '索引失败' : undefined,
+            archiveChildren,
           } as UploadProgressItem
         }
         const errMatch = result.errors.find((e) => e.filename === pf.name)
