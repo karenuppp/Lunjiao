@@ -145,9 +145,9 @@ async def _index_file_local(file_id: str, file_path: str, file_name: str, catego
         return "failed", 0
 
 
-def _update_meta_rag_status(save_path: Path, rag_status: str, chunk_count: int = 0) -> None:
+def _update_meta_rag_status(upload_dir: Path, file_id: str, rag_status: str, chunk_count: int = 0) -> None:
     """Update the .meta companion file with the final indexing status."""
-    meta_path = save_path.parent / f"{save_path.stem}.meta"
+    meta_path = upload_dir / f"{file_id}.meta"
     try:
         if meta_path.exists():
             with open(meta_path, "r", encoding="utf-8") as f:
@@ -338,7 +338,7 @@ async def _process_single_file(
             # Archive extraction failed — clean up and return error
             shutil.rmtree(temp_dir, ignore_errors=True)
             # Update .meta file with failed status
-            _update_meta_rag_status(save_path, "failed", 0)
+            _update_meta_rag_status(upload_dir, file_id, "failed", 0)
             return UploadResponse(
                 file_id=file_id,
                 file_name=filename,
@@ -355,7 +355,7 @@ async def _process_single_file(
         if not extracted_paths:
             shutil.rmtree(temp_dir, ignore_errors=True)
             # Update .meta file with failed status
-            _update_meta_rag_status(save_path, "failed", 0)
+            _update_meta_rag_status(upload_dir, file_id, "failed", 0)
             return UploadResponse(
                 file_id=file_id,
                 file_name=filename,
@@ -415,7 +415,7 @@ async def _process_single_file(
         )
 
         # Update .meta file with final rag_status
-        _update_meta_rag_status(save_path, response.rag_status, response.chunk_count)
+        _update_meta_rag_status(upload_dir, file_id, response.rag_status, response.chunk_count)
 
         return response
 
@@ -444,7 +444,7 @@ async def _process_single_file(
         response.rag_status = "pending"
 
     # Update .meta file with final rag_status
-    _update_meta_rag_status(save_path, response.rag_status, response.chunk_count)
+    _update_meta_rag_status(upload_dir, file_id, response.rag_status, response.chunk_count)
 
     _indexed_files[file_id] = response
     return response
