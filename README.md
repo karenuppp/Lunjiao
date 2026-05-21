@@ -22,12 +22,16 @@
 /chat      → AI 智能问答（所有已认证用户）
 /knowledge-base → 知识库管理（所有已认证用户）
 /admin/users    → 用户管理（仅管理员）
+/admin/database → 数据库管理（仅管理员）
+/admin/prompt   → 提示词管理（仅管理员）
 ```
 
 登录后进入 `/chat`，顶部统一导航栏包含：
 - **AI 智能问答** — ReAct Agent 对话 + SSE 流式输出
 - **知识库管理** — 文档上传、RAG 索引、文件列表管理
 - **用户管理** （仅管理员可见）— 新增/删除/改密用户账号，设置角色
+- **数据库管理** （仅管理员可见）— 数据库连接配置、测试、连接/断开管理
+- **提示词管理** （仅管理员可见）— 维护 AI 智能问答的 System Prompt
 
 右上角为退出按钮（带框体样式），点击清除认证状态并返回登录页。
 
@@ -68,7 +72,9 @@ Lunjiao/
 │   │   │   ├── ChatPanel.tsx         # AI 智能问答面板 (SSE 流式渲染)
 │   │   │   ├── AnalysisPanel.tsx     # 右侧分析面板
 │   │   │   └── KbManagePage.tsx      # 知识库管理页 (上传 + 文件列表表格)
-│   │   │   └── UserManagePage.tsx    # 用户管理页 (管理员: 新增/删除/改密)
+│   │   │   ├── UserManagePage.tsx    # 用户管理页 (管理员: 新增/删除/改密)
+│   │   │   ├── DbManagePage.tsx      # 数据库管理页 (管理员: 连接配置)
+│   │   │   └── PromptManagePage.tsx  # 提示词管理页 (管理员: System Prompt)
 │   │   ├── App.tsx          # 三栏式布局 (侧边栏 + 主对话区 + 分析面板)
 │   │   └── main.tsx         # 入口
 │   ├── package.json
@@ -173,6 +179,8 @@ npm run dev     # http://localhost:5173
 - **MySQL 数据查询** — MCP Server 提供安全的只读 SELECT 查询，按部门类别筛选
 - **多源融合回答** — Agent 自动判断使用 RAG、数据库或两者结合
 - **三栏式布局** — 侧边栏（历史对话）+ 主对话区 + 分析面板
+- **管理后台** — 用户管理、数据库连接管理、System Prompt 编辑（仅管理员）
+- **SSE 流式输出** — 打字机效果实时展现 AI 回答，支持工具调用过程可视化
 
 ## 开发状态
 
@@ -200,8 +208,13 @@ npm run dev     # http://localhost:5173
   - POST /query — 自然语言查文件内容
   - GET /files — 列出已上传文件
 
+### Phase 4 ✅ — 管理后台
+- [x] 用户管理 (CRUD + 角色分配)
+- [x] 数据库连接管理 (增删 + 测试连接 + 连接状态)
+- [x] 提示词管理 (System Prompt 在线编辑与回滚)
+
 ### 即将开发
-- [ ] Phase 4: Skill 分析/报告/可视化模块
-- [ ] Phase 5: 连接真实部门数据源 (MySQL 表对接)
-- [ ] Phase 6: 分析面板 + 报告导出
-- [ ] Phase 7: 优化与生产部署
+- [ ] Phase 5: Skill 分析/报告/可视化模块
+- [ ] Phase 6: 连接真实部门数据源 (MySQL 表对接)
+- [ ] Phase 7: 分析面板 + 报告导出
+- [ ] Phase 8: 优化与生产部署

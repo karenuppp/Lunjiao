@@ -57,10 +57,28 @@ export default function AppHeader({
 
           {isAdmin && (
             <button
-              className={`header-tab ${location.pathname.startsWith('/admin') ? 'header-tab--active' : ''}`}
+              className={`header-tab ${location.pathname.startsWith('/admin/database') ? 'header-tab--active' : ''}`}
+              onClick={() => navigate('/admin/database')}
+            >
+              数据库管理
+            </button>
+          )}
+
+          {isAdmin && (
+            <button
+              className={`header-tab ${location.pathname.startsWith('/admin/users') ? 'header-tab--active' : ''}`}
               onClick={() => navigate('/admin/users')}
             >
               用户管理
+            </button>
+          )}
+
+          {isAdmin && (
+            <button
+              className={`header-tab ${location.pathname.startsWith('/admin/prompt') ? 'header-tab--active' : ''}`}
+              onClick={() => navigate('/admin/prompt')}
+            >
+              提示词管理
             </button>
           )}
         </nav>

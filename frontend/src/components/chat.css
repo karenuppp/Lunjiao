@@ -233,6 +233,25 @@
 /* ---------- Input wrapper layout (Chat Panel) ---------- */
 .input-wrapper { display: flex; align-items: center; gap: 8px; }
 
+/* ---------- Hidden file input ---------- */
+.hidden-file-input { display: none; }
+
+/* ---------- Attach (paperclip) button ---------- */
+.attach-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; flex-shrink: 0;
+  border: 1px solid #E5E7EB; border-radius: 8px;
+  background: #FFF; color: #6B7280; cursor: pointer;
+  transition: all 0.15s ease;
+}
+.attach-btn:hover {
+  border-color: #4F46E5; color: #4F46E5;
+  background: rgba(79, 70, 229, 0.04);
+}
+.attach-btn:disabled {
+  opacity: 0.4; cursor: not-allowed; pointer-events: none;
+}
+
 /* ---------- Suggestion chips (empty state) ---------- */
 .suggestion-chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 

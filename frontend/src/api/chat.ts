@@ -150,6 +150,7 @@ export interface UploadedFileMeta {
   file_type: string
   uploaded_at: string
   rag_status: 'indexed' | 'pending' | 'failed'
+  rag_error?: string
   user_id?: string
 }
 
@@ -230,13 +231,111 @@ export function isArchiveFile(filename: string): boolean {
 }
 
 // ============================================================
-// User Management API (admin)
+// Database Connection APIs
 // ============================================================
+
+export interface DbFieldInfo {
+  name: string
+  type: string
+}
+
+export interface DbConnectionRecord {
+  id: number
+  name: string
+  host: string
+  port: number
+  table_name: string
+  db_user: string
+  status: 'connected' | 'disconnected'
+  table_fields: DbFieldInfo[] | null
+  created_at: string
+}
+
+export interface TestConnectionResult {
+  success: boolean
+  message: string
+  fields: DbFieldInfo[]
+}
+
+export async function listDbConnections(): Promise<DbConnectionRecord[]> {
+  const res = await fetch(`${BASE_URL}/db-connections/`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function createDbConnection(payload: {
+  name: string
+  host: string
+  port: number
+  table_name: string
+  db_user: string
+  db_password: string
+}): Promise<DbConnectionRecord> {
+  const res = await fetch(`${BASE_URL}/db-connections/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function testDbConnection(payload: {
+  name: string
+  host: string
+  port: number
+  table_name: string
+  db_user: string
+  db_password: string
+}): Promise<TestConnectionResult> {
+  const res = await fetch(`${BASE_URL}/db-connections/test`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function testSavedDbConnection(connId: number): Promise<TestConnectionResult> {
+  const res = await fetch(`${BASE_URL}/db-connections/${connId}/test`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function disconnectDbConnection(connId: number): Promise<void> {
+  const res = await fetch(`${BASE_URL}/db-connections/${connId}/disconnect`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+}
+
+export async function connectDbConnection(connId: number): Promise<{ message: string; status: string }> {
+  const res = await fetch(`${BASE_URL}/db-connections/${connId}/connect`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function deleteDbConnection(connId: number): Promise<void> {
+  const res = await fetch(`${BASE_URL}/db-connections/${connId}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+}
 
 export interface UserRecord {
   id: number
   account: string
   role: string
+  kb_scope: string
+  db_scope: number[] | null
+}
+
+export interface QueryPermission {
+  kb_scope: string
+  db_scope: number[] | null
 }
 
 /** List all users (admin only). Returns 403 if caller is not admin. */
@@ -277,6 +376,76 @@ export async function changeUserPassword(userId: number, newPassword: string): P
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ new_password: newPassword }),
   })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as any).detail || `HTTP ${res.status}`)
+  }
+}
+
+/** Get user query permission (admin only). */
+export async function getUserQueryPermission(userId: number): Promise<QueryPermission> {
+  const callerId = localStorage.getItem('lunjiao_user_id') || ''
+  const res = await fetch(
+    `${BASE_URL}/auth/users/${userId}/query-permission?caller_id=${encodeURIComponent(callerId)}`,
+  )
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+// ============================================================
+// System Prompt APIs
+// ============================================================
+
+export interface PromptRecord {
+  key: string
+  content: string
+  updated_at: string | null
+}
+
+/** Get current system prompt. */
+export async function getSystemPrompt(): Promise<PromptRecord> {
+  const res = await fetch(`${BASE_URL}/prompt`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+/** Update system prompt (admin only). */
+export async function updateSystemPrompt(content: string): Promise<{ ok: boolean; key: string; updated_at: string }> {
+  const res = await fetch(`${BASE_URL}/prompt`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as any).detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+/** Reset system prompt to built-in default. */
+export async function resetSystemPrompt(): Promise<{ ok: boolean; content: string; updated_at: string }> {
+  const res = await fetch(`${BASE_URL}/prompt/reset`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+/** Set user query permission (admin only). */
+export async function setUserQueryPermission(
+  userId: number,
+  payload: QueryPermission,
+): Promise<void> {
+  const callerId = localStorage.getItem('lunjiao_user_id') || ''
+  const res = await fetch(
+    `${BASE_URL}/auth/users/${userId}/query-permission?caller_id=${encodeURIComponent(callerId)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  )
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
     throw new Error((data as any).detail || `HTTP ${res.status}`)

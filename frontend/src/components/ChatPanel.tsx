@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { MessageSquare, User, Sparkles, Loader2, X, SendHorizontal, FileText, Table2, Presentation, Archive, Image as ImageIcon, FileType } from 'lucide-react'
+import { MessageSquare, User, Sparkles, Loader2, X, SendHorizontal, FileText, Table2, Presentation, Archive, Image as ImageIcon, FileType, Paperclip } from 'lucide-react'
 import './chat.css'
 
 interface Message {
@@ -65,6 +65,7 @@ export default function ChatPanel({
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Auto scroll
   useEffect(() => {
@@ -125,6 +126,27 @@ export default function ChatPanel({
   const removeContextFile = useCallback((fileId: string) => {
     setContextFiles(prev => prev.filter(f => f.id !== fileId))
   }, [])
+
+  // ---- File picker (paperclip icon) ----
+  const handlePaperclipClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    setContextFiles(prev => {
+      const next = [...prev]
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i]
+        next.push({ id: `cf-${++fileIdCounter}`, name: f.name, size: f.size })
+      }
+      return next
+    })
+    // Reset so same file can be re-selected
+    e.target.value = ''
+  }
 
   // ---- Send ----
   const handleSend = () => {
@@ -250,6 +272,21 @@ export default function ChatPanel({
             rows={1}
             disabled={isLoading}
           />
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden-file-input"
+            onChange={handleFileInputChange}
+          />
+          <button
+            className="attach-btn"
+            onClick={handlePaperclipClick}
+            disabled={isLoading}
+            title="添加文件"
+          >
+            <Paperclip size={18} strokeWidth={1.8} />
+          </button>
           <button
             className={`send-btn ${canSend ? 'active' : ''}`}
             onClick={handleSend}

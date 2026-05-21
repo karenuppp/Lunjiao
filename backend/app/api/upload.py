@@ -36,6 +36,7 @@ class UploadResponse(BaseModel):
     category: str
     uploaded_at: str
     rag_status: str  # "indexed" | "pending" | "failed"
+    rag_error: str = ""  # human-readable error message when rag_status="failed"
     chunk_count: int = 0
     user_id: str = "default"
     is_archive: bool = False
@@ -128,8 +129,12 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
     return rebuilt
 
 
-async def _index_file_local(file_id: str, file_path: str, file_name: str, category: str, user_id: str = "default") -> tuple[str, int]:
-    """Index the uploaded file using RAGAnything (async)."""
+async def _index_file_local(file_id: str, file_path: str, file_name: str, category: str, user_id: str = "default") -> tuple[str, int, str]:
+    """Index the uploaded file using RAGAnything (async).
+
+    Returns:
+        (rag_status, chunk_count, error_message)
+    """
     try:
         doc_id = await rag.index_file(
             file_path=file_path,
@@ -138,11 +143,12 @@ async def _index_file_local(file_id: str, file_path: str, file_name: str, catego
             user_id=user_id,
         )
         if not doc_id:
-            return "failed", 0
-        return "indexed", 1
+            return "failed", 0, "文件内容为空或解析失败"
+        return "indexed", 1, ""
     except Exception as e:
-        print(f"[Upload] RAG indexing error: {e}")
-        return "failed", 0
+        error_msg = str(e) if str(e) else type(e).__name__
+        print(f"[Upload] RAG indexing error for {file_name}: {error_msg}")
+        return "failed", 0, f"索引过程异常: {error_msg}"
 
 
 def _update_meta_rag_status(upload_dir: Path, file_id: str, rag_status: str, chunk_count: int = 0) -> None:
@@ -384,7 +390,7 @@ async def _process_single_file(
                 })
                 continue
 
-            rag_status, chunk_count = await _index_file_local(
+            rag_status, chunk_count, rag_error = await _index_file_local(
                 file_id, child_path, child_name, category, user_id
             )
             total_chunks += chunk_count
@@ -395,7 +401,7 @@ async def _process_single_file(
                 extracted_files.append({
                     "name": child_name,
                     "status": "error",
-                    "error": "索引失败",
+                    "error": rag_error or "索引失败",
                 })
 
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -437,11 +443,13 @@ async def _process_single_file(
 
     # Wait for RAG indexing (max 60s per file)
     try:
-        rag_status, chunk_count = await asyncio.wait_for(rag_task, timeout=60.0)
+        rag_status, chunk_count, rag_error = await asyncio.wait_for(rag_task, timeout=60.0)
         response.rag_status = rag_status
         response.chunk_count = chunk_count
+        response.rag_error = rag_error
     except asyncio.TimeoutError:
-        response.rag_status = "pending"
+        response.rag_status = "failed"
+        response.rag_error = "索引超时（60 秒），可能嵌入服务未启动或文件过大"
 
     # Update .meta file with final rag_status
     _update_meta_rag_status(upload_dir, file_id, response.rag_status, response.chunk_count)

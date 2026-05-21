@@ -578,7 +578,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             uid: pf.uid,
             name: pf.name,
             status: match.rag_status === 'indexed' ? 'done' as const : 'error' as const,
-            error: match.rag_status === 'failed' ? '索引失败' : undefined,
+            error: match.rag_status === 'failed'
+              ? (match.rag_error || '索引失败（未知原因）')
+              : match.rag_status === 'pending'
+                ? '索引超时，仍在处理中'
+                : undefined,
             archiveChildren,
           } as UploadProgressItem
         }

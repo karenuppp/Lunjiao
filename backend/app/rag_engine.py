@@ -132,15 +132,15 @@ class RAGEngineAdapter:
             enable_equation_processing=False,
             max_concurrent_files=1,
             use_full_path=True,
-            lightrag_kwargs={
-                "workspace": user_id,  # LightRAG data isolation key
-            },
         )
 
         rag = RAGAnything(
             config=config,
             llm_model_func=_create_llm_model_func(),
             embedding_func=_create_embedding_func(),
+            lightrag_kwargs={
+                "workspace": user_id,  # LightRAG data isolation key
+            },
         )
 
         # Initialize the underlying LightRAG engine
@@ -214,7 +214,11 @@ class RAGEngineAdapter:
 
         if text_content is not None:
             # Direct chunk upsert into LightRAG (skips LLM entity extraction entirely)
-            lightrag = user_rag.lightrag
+            try:
+                lightrag = user_rag.lightrag
+            except AttributeError as e:
+                print(f"[RAG-Anything] LightRAG not initialized for user {user_id}: {e}")
+                return ""
             paragraphs = [p.strip() for p in text_content.split('\n\n') if p.strip()]
             text_chunks = []
             for para in paragraphs:
@@ -228,26 +232,32 @@ class RAGEngineAdapter:
 
             doc_key = hashlib.md5(text_content.encode()).hexdigest()[:16]
 
-            # Insert full document
-            await lightrag.full_docs.upsert(
-                {doc_key: {"content": text_content, "file_path": ""}}
-            )
+            try:
+                # Insert full document
+                await lightrag.full_docs.upsert(
+                    {doc_key: {"content": text_content, "file_path": ""}}
+                )
 
-            # Build and insert chunk data (no entity extraction)
-            inserting_chunks = {}
-            for idx, chunk_text in enumerate(text_chunks):
-                chunk_key = hashlib.md5(chunk_text.encode()).hexdigest()[:16]
-                inserting_chunks[chunk_key] = {
-                    "content": chunk_text,
-                    "full_doc_id": doc_key,
-                    "tokens": len(chunk_text.split()),
-                    "chunk_order_index": idx,
-                    "file_path": "",
-                }
+                # Build and insert chunk data (no entity extraction)
+                inserting_chunks = {}
+                for idx, chunk_text in enumerate(text_chunks):
+                    chunk_key = hashlib.md5(chunk_text.encode()).hexdigest()[:16]
+                    inserting_chunks[chunk_key] = {
+                        "content": chunk_text,
+                        "full_doc_id": doc_key,
+                        "tokens": len(chunk_text.split()),
+                        "chunk_order_index": idx,
+                        "file_path": "",
+                    }
 
-            await lightrag.chunks_vdb.upsert(inserting_chunks)
-            await lightrag.text_chunks.upsert(inserting_chunks)
-            await lightrag._insert_done()
+                await lightrag.chunks_vdb.upsert(inserting_chunks)
+                await lightrag.text_chunks.upsert(inserting_chunks)
+                await lightrag._insert_done()
+            except Exception as e:
+                print(f"[RAG-Anything] LightRAG upsert error for {file_name or Path(file_path).name}: {e}")
+                # Re-raise so caller can capture the error message
+                raise RuntimeError(f"向量索引写入失败: {e}") from e
+
             print(
                 f"[RAG-Anything] Direct-inserted {file_name or Path(file_path).name} "
                 f"({len(text_content)} chars) via LightRAG"

@@ -42,13 +42,15 @@ def main():
     parser.add_argument("--role", default="admin", help="角色 (默认: admin)")
     args = parser.parse_args()
 
-    from app.models.user import Base, User
+    from app.database import Base
+    from app.models.user import User
+    from app.models.db_connection import DbConnection
 
     engine = get_engine()
 
     # 1. 建表
-    print(f"\n📦 创建 users 表 (如果不存在)...")
-    Base.metadata.create_all(engine, tables=[User.__table__])
+    print(f"\n📦 创建用户表与数据库连接表 (如果不存在)...")
+    Base.metadata.create_all(engine, tables=[User.__table__, DbConnection.__table__])
 
     # 2. 插入测试账号
     with Session(engine) as session:

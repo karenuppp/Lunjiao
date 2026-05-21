@@ -7,8 +7,8 @@
 
 import React, { useState, useRef, useCallback } from 'react'
 import {
-  Input, Button, Table, Modal, Tag, Empty, Select,
-  InputNumber, Space, Tooltip, message,
+  Input, Button, Table, Modal, Tag, Empty,
+  Space, Tooltip, message,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { InputRef } from 'antd'
@@ -20,7 +20,7 @@ import type { UploadedFileMeta } from '../api/chat'
 import {
   UploadCloud, FileText, FileType, Table2,
   Presentation, Archive, Image as ImageIcon, Loader2, Search, RefreshCw,
-  Trash2, XCircle, CheckCircle2, Inbox, Settings2, ChevronDown, ChevronRight,
+  Trash2, XCircle, CheckCircle2, Inbox,
 } from 'lucide-react'
 
 // ============================================================
@@ -258,49 +258,6 @@ function UploadModalBody({ onDone }: { onDone: () => void }) {
 }
 
 
-function RetrievalSettingsPanel() {
-  const [topK, setTopK] = useState(5)
-  const [threshold, setThreshold] = useState(0.7)
-  const [method, setMethod] = useState<'vector' | 'hybrid' | 'keyword'>('vector')
-
-  return (
-    <div className="kb-settings-panel">
-      <div className="kb-settings-grid">
-        <div className="kb-settings-item">
-          <label className="kb-settings-label">Top K</label>
-          <InputNumber
-            min={1} max={20} value={topK} onChange={(v) => setTopK(v ?? 5)}
-            size="small" style={{ width: 80 }}
-          />
-        </div>
-        <div className="kb-settings-item">
-          <label className="kb-settings-label">相似度阈值</label>
-          <InputNumber
-            min={0} max={1} step={0.05} value={threshold}
-            onChange={(v) => setThreshold(v ?? 0.7)}
-            size="small" style={{ width: 80 }}
-          />
-        </div>
-        <div className="kb-settings-item">
-          <label className="kb-settings-label">检索方法</label>
-          <Select
-            value={method} onChange={setMethod}
-            size="small" style={{ width: 110 }}
-            options={[
-              { value: 'vector', label: '向量检索' },
-              { value: 'hybrid', label: '混合检索' },
-              { value: 'keyword', label: '关键词' },
-            ]}
-          />
-        </div>
-      </div>
-      <div className="kb-settings-hint">
-        这些参数将影响 AI 问答时从知识库检索文档的行为。当前设置仅作用于当前会话。
-      </div>
-    </div>
-  )
-}
-
 // ============================================================
 // Main component
 // ============================================================
@@ -320,8 +277,6 @@ export default function KbManagePage() {
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
-
-  const [settingsOpen, setSettingsOpen] = useState(false)
 
   const searchInputRef = useRef<InputRef>(null)
 
@@ -404,11 +359,16 @@ export default function KbManagePage() {
       title: '文件名',
       dataIndex: 'file_name',
       key: 'file_name',
+      width: 260,
       render: (name: string) => (
-        <Space size={8}>
-          {renderFileIcon(name)}
-          <span className="file-name">{name}</span>
-        </Space>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+          <span style={{ flexShrink: 0 }}>{renderFileIcon(name)}</span>
+          <span className="file-name" style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}>{name}</span>
+        </div>
       ),
       sorter: (a, b) => a.file_name.localeCompare(b.file_name),
     },
@@ -479,61 +439,57 @@ export default function KbManagePage() {
   }
 
   return (
-    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-      <div className="kb-toolbar">
-        <div className="kb-toolbar-left">
+    <div style={{ height: '100%', padding: '32px', overflow: 'auto' }}>
+      {/* Single card: toolbar + file table */}
+      <div className="page-card">
+        <h3 className="page-card-heading">文件管理</h3>
+
+        {/* Row 1: scope toggle (left) + action buttons (right) — same row */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            {isAdmin && (
+              <div className="scope-toggle">
+                <button onClick={() => setScope('personal')} className={scope === 'personal' ? 'active' : ''}>个人</button>
+                <button onClick={() => setScope('public')} className={scope === 'public' ? 'active' : ''}>公用</button>
+                <button onClick={() => setScope('all')} className={scope === 'all' ? 'active' : ''}>全部</button>
+              </div>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Button size="middle" icon={<RefreshCw size={14} />} onClick={loadFiles} loading={loading}>
+              刷新
+            </Button>
+
+            <Button type="primary" size="middle" icon={<UploadCloud size={14} />} onClick={() => setUploadOpen(true)}>
+              上传文件
+            </Button>
+
+            {selectedRowKeys.length > 0 && (
+              <Button size="middle" danger icon={<Trash2 size={14} />} onClick={handleBatchDelete}>
+                删除 ({selectedRowKeys.length})
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* Row 2: file list heading (left) + search (right) — same line */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <h3 className="page-card-heading" style={{ margin: 0 }}>
+            文件列表（{scopedFiles.length}）
+          </h3>
           <Input
             ref={searchInputRef}
-            placeholder="搜索文件名..."
+            placeholder="搜索文件名…"
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}
             prefix={<Search size={14} style={{ color: '#9CA3AF' }} />}
-            size="small"
-            style={{ width: 240 }}
+            size="middle"
+            style={{ width: 220 }}
             allowClear
           />
-
-          {isAdmin && (
-            <div className="scope-toggle">
-              <button onClick={() => setScope('personal')} className={`scope-btn ${scope === 'personal' ? 'active' : ''}`}>个人</button>
-              <button onClick={() => setScope('public')}   className={`scope-btn ${scope === 'public' ? 'active' : ''}`}>公用</button>
-              <button onClick={() => setScope('all')}       className={`scope-btn ${scope === 'all' ? 'active' : ''}`}>全部</button>
-            </div>
-          )}
         </div>
 
-        <div className="kb-toolbar-right">
-          <Tooltip title="检索设置">
-            <Button
-              type={settingsOpen ? 'primary' : 'default'}
-              size="small"
-              icon={<Settings2 size={14} />}
-              onClick={() => setSettingsOpen(!settingsOpen)}
-            >
-              检索设置
-              {settingsOpen ? <ChevronDown size={12} style={{ marginLeft: 2 }} /> : <ChevronRight size={12} style={{ marginLeft: 2 }} />}
-            </Button>
-          </Tooltip>
-
-          <Button size="small" icon={<RefreshCw size={14} />} onClick={loadFiles} loading={loading}>
-            刷新
-          </Button>
-
-          <Button type="primary" size="small" icon={<UploadCloud size={14} />} onClick={() => setUploadOpen(true)}>
-            上传文件
-          </Button>
-
-          {selectedRowKeys.length > 0 && (
-            <Button size="small" danger icon={<Trash2 size={14} />} onClick={handleBatchDelete}>
-              删除 ({selectedRowKeys.length})
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {settingsOpen && <RetrievalSettingsPanel />}
-
-      <div style={{ flex: 1, padding: '0 24px 24px', overflow: 'auto' }}>
         <Table<UploadedFileMeta>
           dataSource={scopedFiles}
           columns={columns}
@@ -551,11 +507,11 @@ export default function KbManagePage() {
           locale={{
             emptyText: (
               <Empty
-                image={<Inbox size={48} style={{ color: '#D1D5DB' }} />}
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
                 description={
                   <div>
                     <div style={{ color: '#9CA3AF', marginBottom: 12 }}>暂无已上传文件</div>
-                    <Button type="primary" size="small" icon={<UploadCloud size={14} />} onClick={() => setUploadOpen(true)}>
+                    <Button type="primary" size="middle" icon={<UploadCloud size={14} />} onClick={() => setUploadOpen(true)}>
                       上传第一个文件
                     </Button>
                   </div>
@@ -563,9 +519,7 @@ export default function KbManagePage() {
               />
             ),
           }}
-          style={{ background: '#FFF', borderRadius: 8 }}
         />
-
         {error && !loading && (
           <div style={{ textAlign: 'center', padding: 24, color: '#EF4444' }}>{error}</div>
         )}

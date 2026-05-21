@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.api import chat, data_sources, history, upload, auth
+from app.api import chat, data_sources, history, upload, auth, db_connections, prompt
+from app.database import init_db
 from pathlib import Path
 
 app = FastAPI(
@@ -24,6 +25,11 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+def startup():
+    init_db()
+
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "version": "0.1.0"}
@@ -35,6 +41,8 @@ app.include_router(data_sources.router, prefix="/api/data-sources", tags=["data-
 app.include_router(history.router, prefix="/api/history", tags=["history"])
 app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(db_connections.router, prefix="/api/db-connections", tags=["db-connections"])
+app.include_router(prompt.router, prefix="/api/prompt", tags=["prompt"])
 
 # ── Production: serve built frontend when dist/ exists ──
 # Dev mode   → `npm run dev` (Vite on :5173 proxies /api to :8000)

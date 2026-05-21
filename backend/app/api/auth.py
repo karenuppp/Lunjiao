@@ -47,12 +47,24 @@ class UserItem(BaseModel):
     id: int
     account: str
     role: str
+    kb_scope: str = "personal"
+    db_scope: list[int] | None = None
 
     model_config = {"from_attributes": True}
 
 
 class ChangePasswordRequest(BaseModel):
     new_password: str
+
+
+class SetQueryPermissionRequest(BaseModel):
+    kb_scope: str  # "public" | "personal" | "none"
+    db_scope: list[int] | None = None  # list of connection IDs
+
+
+class QueryPermissionResponse(BaseModel):
+    kb_scope: str
+    db_scope: list[int] | None = None
 
 
 # ============================================================
@@ -99,12 +111,35 @@ def _require_admin(db: Session, user_id: str):
     return user
 
 
+def _parse_db_scope(raw: str | None) -> list[int] | None:
+    """Parse db_scope JSON string to list of ints."""
+    if not raw:
+        return None
+    try:
+        import json
+        parsed = json.loads(raw)
+        if isinstance(parsed, list):
+            return [int(x) for x in parsed]
+        return None
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return None
+
+
 @router.get("/users", response_model=list[UserItem])
 def list_users(user_id: str, db: Session = Depends(get_db)):
     """列出所有用户 (管理员)"""
     _require_admin(db, user_id)
     users = db.query(User).order_by(User.id).all()
-    return [UserItem(id=u.id, account=u.account, role=u.role) for u in users]
+    return [
+        UserItem(
+            id=u.id,
+            account=u.account,
+            role=u.role,
+            kb_scope=u.kb_scope or "personal",
+            db_scope=_parse_db_scope(u.db_scope),
+        )
+        for u in users
+    ]
 
 
 @router.post("/users", response_model=UserItem)
@@ -153,4 +188,43 @@ def change_password(user_id: int, caller_id: str, req: ChangePasswordRequest, db
 
     user.password = req.new_password
     db.commit()
+    return {"ok": True}
+
+
+# ============================================================
+# 查询权限管理
+# ============================================================
+
+@router.get("/users/{user_id}/query-permission", response_model=QueryPermissionResponse)
+def get_query_permission(user_id: int, caller_id: str, db: Session = Depends(get_db)):
+    """获取用户的查询权限 (管理员)"""
+    _require_admin(db, caller_id)
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    return QueryPermissionResponse(
+        kb_scope=user.kb_scope or "personal",
+        db_scope=_parse_db_scope(user.db_scope),
+    )
+
+
+@router.put("/users/{user_id}/query-permission")
+def set_query_permission(user_id: int, caller_id: str, req: SetQueryPermissionRequest, db: Session = Depends(get_db)):
+    """设置用户的查询权限 (管理员)"""
+    _require_admin(db, caller_id)
+
+    if req.kb_scope not in ("public", "personal", "none"):
+        raise HTTPException(status_code=400, detail="kb_scope 只能是 public、personal 或 none")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="用户不存在")
+
+    import json
+    user.kb_scope = req.kb_scope
+    user.db_scope = json.dumps(req.db_scope) if req.db_scope else None
+    db.commit()
+
     return {"ok": True}

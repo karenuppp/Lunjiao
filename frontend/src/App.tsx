@@ -12,13 +12,11 @@ import Sidebar from './components/Sidebar'
 import AppHeader from './components/AppHeader'
 import ChatPanel from './components/ChatPanel'
 import KbManagePage from './components/KbManagePage'
+import DbManagePage from './components/DbManagePage'
 import UserManagePage from './components/UserManagePage'
+import PromptManagePage from './components/PromptManagePage'
 
 const { Sider, Content } = Layout
-
-// ============================================================
-// LoginPage Wrapper — connects to chatStore login
-// ============================================================
 
 function LoginPageWrapper() {
   const chat = useChat()
@@ -33,10 +31,6 @@ function LoginPageWrapper() {
   return <LoginPage onLogin={handleLogin} />
 }
 
-// ============================================================
-// ProtectedRoute — redirects to /login if not authenticated
-// ============================================================
-
 function ProtectedRoute({ children, requireAdmin }: { children: ReactNode; requireAdmin?: boolean }) {
   const chat = useChat()
 
@@ -50,10 +44,6 @@ function ProtectedRoute({ children, requireAdmin }: { children: ReactNode; requi
 
   return <>{children}</>
 }
-
-// ============================================================
-// ChatLayout — sidebar + header + chat panel / kb page (existing UI)
-// ============================================================
 
 function ChatLayout() {
   const chat = useChat()
@@ -115,30 +105,20 @@ function ChatLayout() {
   )
 }
 
-// ============================================================
-// AdminLayout — header only, no sidebar (for admin pages)
-// ============================================================
-
-function AdminLayout({ children }: { children: ReactNode }) {
+function AdminLayout({ children, title }: { children: ReactNode; title: string }) {
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#f5f5f5' }}>
       <AppHeader
         collapsed={false}
         onToggleSidebar={() => {}}
-        sessionTitle="用户管理"
+        sessionTitle={title}
       />
       <Content style={{ flex: 1, overflow: 'hidden' }}>
-        <div style={{ height: '100%', padding: '32px', overflow: 'auto' }}>
-          {children}
-        </div>
+        {children}
       </Content>
     </div>
   )
 }
-
-// ============================================================
-// App — Root component with routing
-// ============================================================
 
 export default function App() {
   return (
@@ -167,11 +147,33 @@ export default function App() {
             />
 
             <Route
+              path="/admin/database"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <AdminLayout title="数据库管理">
+                    <DbManagePage />
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
               path="/admin/users"
               element={
                 <ProtectedRoute requireAdmin>
-                  <AdminLayout>
+                  <AdminLayout title="用户管理">
                     <UserManagePage />
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/prompt"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <AdminLayout title="提示词管理">
+                    <PromptManagePage />
                   </AdminLayout>
                 </ProtectedRoute>
               }
