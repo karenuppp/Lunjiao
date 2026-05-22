@@ -26,6 +26,16 @@ class Settings:
     rag_api_base: str = os.getenv("RAG_API_BASE", "http://localhost:8023")
     rag_api_key: str = os.getenv("RAG_API_KEY", "ragflow-fe1010104b7e11efa01e0242ac1c0006")   # RAG-Anything 默认 key
 
+    # ── Embedding ──
+    embedding_model: str = os.getenv("EMBEDDING_MODEL", "text-embedding-nomic-embed-text-v1.5")
+    embedding_dim: int = int(os.getenv("EMBEDDING_DIM", "768"))
+    embedding_workers: int = int(os.getenv("EMBEDDING_WORKERS", "2"))
+
+    # ── LightRAG 核心调优 ──
+    rag_chunk_top_k: int = int(os.getenv("RAG_CHUNK_TOP_K", "5"))
+    rag_cosine_threshold: float = float(os.getenv("RAG_COSINE_THRESHOLD", "0.3"))
+    rag_max_context_tokens: int = int(os.getenv("RAG_MAX_CONTEXT_TOKENS", "1200"))
+
     # ── MCP Server (database) ──
     mcp_server_base: str = os.getenv("MCP_SERVER_BASE", "http://localhost:8024")
 

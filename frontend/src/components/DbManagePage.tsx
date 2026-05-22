@@ -44,6 +44,7 @@ export default function DbManagePage() {
   const [connName, setConnName] = useState('')
   const [host, setHost] = useState('')
   const [port, setPort] = useState<number | null>(3306)
+  const [dbName, setDbName] = useState('')
   const [tableName, setTableName] = useState('')
   const [dbUser, setDbUser] = useState('')
   const [dbPassword, setDbPassword] = useState('')
@@ -56,6 +57,7 @@ export default function DbManagePage() {
     setConnName('')
     setHost('')
     setPort(3306)
+    setDbName('')
     setTableName('')
     setDbUser('')
     setDbPassword('')
@@ -74,6 +76,7 @@ export default function DbManagePage() {
         name: connName || '临时连接',
         host,
         port: port!,
+        db_name: dbName,
         table_name: tableName,
         db_user: dbUser,
         db_password: dbPassword,
@@ -107,6 +110,7 @@ export default function DbManagePage() {
         name: connName,
         host,
         port: port!,
+        db_name: dbName,
         table_name: tableName,
         db_user: dbUser,
         db_password: dbPassword,
@@ -306,15 +310,6 @@ export default function DbManagePage() {
 
           <div style={{ display: 'flex', gap: 16 }}>
             <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>表名</div>
-              <Input
-                placeholder="例如：users"
-                value={tableName}
-                onChange={(e) => setTableName(e.target.value)}
-                size="middle"
-              />
-            </div>
-            <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>用户</div>
               <Input
                 placeholder="数据库用户名"
@@ -323,9 +318,6 @@ export default function DbManagePage() {
                 size="middle"
               />
             </div>
-          </div>
-
-          <div style={{ display: 'flex', gap: 16 }}>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>密码</div>
               <Input.Password
@@ -335,21 +327,27 @@ export default function DbManagePage() {
                 size="middle"
               />
             </div>
-            <div style={{ flex: 1 }} />
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <Button onClick={handleTest} loading={testing} size="middle">
-              测试连接
-            </Button>
-            {testResult?.success && (
-              <span style={{ color: '#16a34a', fontWeight: 600, fontSize: 14 }}>
-                连接成功！
-              </span>
-            )}
-            {testResult && !testResult.success && (
-              <span style={{ color: '#dc2626', fontSize: 13 }}>{testResult.message}</span>
-            )}
+          <div style={{ display: 'flex', gap: 16 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>数据库名</div>
+              <Input
+                placeholder="例如：mydb（可选）"
+                value={dbName}
+                onChange={(e) => setDbName(e.target.value)}
+                size="middle"
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>表名</div>
+              <Input
+                placeholder="例如：users"
+                value={tableName}
+                onChange={(e) => setTableName(e.target.value)}
+                size="middle"
+              />
+            </div>
           </div>
 
           {testResult?.success && testResult.fields.length > 0 && (
@@ -368,7 +366,23 @@ export default function DbManagePage() {
             </div>
           )}
 
+          {(testResult?.success || (testResult && !testResult.success)) && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {testResult?.success && (
+                <span style={{ color: '#16a34a', fontWeight: 600, fontSize: 14 }}>
+                  连接成功！
+                </span>
+              )}
+              {testResult && !testResult.success && (
+                <span style={{ color: '#dc2626', fontSize: 13 }}>{testResult.message}</span>
+              )}
+            </div>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12, marginTop: 8 }}>
+            <Button onClick={handleTest} loading={testing} size="middle">
+              测试连接
+            </Button>
             <Button
               size="middle"
               onClick={() => {

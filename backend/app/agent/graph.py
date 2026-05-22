@@ -13,6 +13,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from app.agent.tools import get_schemas, execute_tool
 from app.config import settings
 from app.models.system_prompt import SystemPrompt
+from app.models.db_connection import DbConnection
 from app.database import SessionLocal
 
 
@@ -34,6 +35,22 @@ def _load_system_prompt() -> str:
 
 
 SYSTEM_PROMPT = _load_system_prompt()
+
+
+# ============================================================
+# Helper: look up DB connection display name
+# ============================================================
+
+def _lookup_connection_name(conn_id: int) -> str:
+    """Look up a database connection's display name for tool labels."""
+    if not conn_id:
+        return ""
+    db = SessionLocal()
+    try:
+        conn = db.query(DbConnection).filter(DbConnection.id == conn_id).first()
+        return str(conn.name) if conn else ""
+    finally:
+        db.close()
 
 
 # ============================================================
@@ -77,6 +94,8 @@ async def _run_react_loop(
     model: str | None = None,
     max_tool_rounds: int = 5,
     user_id: str = "default",
+    kb_scope: str = "personal",
+    db_scope: list[int] | None = None,
 ) -> tuple[str, list[str]]:
     """Run a manual ReAct loop using OpenAI tool-calling.
 
@@ -120,12 +139,15 @@ async def _run_react_loop(
 
             # Track data sources
             if func_name == "query_rag":
-                data_sources.add("RAG文档检索")
+                data_sources.add("检索知识库")
             elif func_name in ("query_db", "list_db_tables"):
-                data_sources.add("数据库查询")
+                data_sources.add("查询数据库")
 
             # Execute
-            result = await execute_tool(func_name, user_id=user_id, **args)
+            result = await execute_tool(
+                func_name, user_id=user_id,
+                kb_scope=kb_scope, db_scope=db_scope, **args,
+            )
 
             # Append assistant message with tool call
             assistant_msg: dict = {
@@ -159,13 +181,21 @@ async def _run_react_loop(
 # Sync API — for non-streaming requests
 # ============================================================
 
-def run_agent_sync(question: str, history: List[dict] | None = None, user_id: str = "default") -> dict:
+async def run_agent_sync(
+    question: str,
+    history: List[dict] | None = None,
+    user_id: str = "default",
+    kb_scope: str = "personal",
+    db_scope: list[int] | None = None,
+) -> dict:
     """Run the agent synchronously and return structured result."""
     import asyncio
 
     async def _run():
         messages = _build_messages(question, history)
-        answer, data_sources_used = await _run_react_loop(messages, user_id=user_id)
+        answer, data_sources_used = await _run_react_loop(
+            messages, user_id=user_id, kb_scope=kb_scope, db_scope=db_scope,
+        )
         return {
             "answer": answer,
             "data_sources_used": data_sources_used,
@@ -184,7 +214,11 @@ def format_sse_event(event_type: str, data: Any) -> str:
 
 
 async def run_agent_stream_simple(
-    question: str, history: List[dict] | None = None, user_id: str = "default"
+    question: str,
+    history: List[dict] | None = None,
+    user_id: str = "default",
+    kb_scope: str = "personal",
+    db_scope: list[int] | None = None,
 ) -> AsyncIterator[str]:
     """Run the agent with SSE streaming output.
 
@@ -268,15 +302,30 @@ async def run_agent_stream_simple(
 
                 # Track data source
                 if func_name == "query_rag":
-                    data_sources_detected.append("RAG文档检索")
+                    data_sources_detected.append("检索知识库")
                 elif func_name in ("query_db", "list_db_tables"):
-                    data_sources_detected.append("数据库查询")
+                    data_sources_detected.append("查询数据库")
 
-                tool_label = {
-                    "query_rag": "RAG文档检索",
-                    "query_db": "数据库查询",
-                    "list_db_tables": "查看表结构",
-                }.get(func_name, func_name)
+                # Build context-aware tool label for frontend display
+                if func_name == "query_rag":
+                    kb_label = {
+                        "personal": "检索个人知识库",
+                        "public": "检索公共知识库",
+                        "none": "检索知识库",
+                    }.get(kb_scope, "检索知识库")
+                    tool_label = f"{kb_label}..."
+                elif func_name == "list_db_connections":
+                    tool_label = "查看可用数据库..."
+                elif func_name == "list_db_tables":
+                    conn_id = args.get("connection_id", 0)
+                    conn_name = _lookup_connection_name(conn_id) if conn_id else ""
+                    tool_label = f"查看{conn_name}表结构..." if conn_name else "查看表结构..."
+                elif func_name == "query_db":
+                    conn_id = args.get("connection_id", 0)
+                    conn_name = _lookup_connection_name(conn_id) if conn_id else ""
+                    tool_label = f"查询{conn_name}数据库..." if conn_name else "查询数据库..."
+                else:
+                    tool_label = func_name
 
                 yield format_sse_event("tool_call_start", {
                     "tool": func_name,
@@ -285,7 +334,10 @@ async def run_agent_stream_simple(
                 })
 
                 # Execute
-                result = await execute_tool(func_name, user_id=user_id, **args)
+                result = await execute_tool(
+                    func_name, user_id=user_id,
+                    kb_scope=kb_scope, db_scope=db_scope, **args,
+                )
 
                 yield format_sse_event("tool_call_end", {
                     "tool": func_name,

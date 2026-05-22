@@ -67,15 +67,18 @@ def _create_embedding_func():
     from lightrag.utils import wrap_embedding_func_with_attrs
     base_url = settings.openai_base_url.rstrip("/").replace("/v1", "")
 
-    @wrap_embedding_func_with_attrs(embedding_dim=768, max_token_size=8192)
+    embedding_dim_val = settings.embedding_dim
+    embedding_model_val = settings.embedding_model
+
+    @wrap_embedding_func_with_attrs(embedding_dim=embedding_dim_val, max_token_size=8192)
     async def emb_func(texts: list[str]) -> np.ndarray:
         """LightRAG-compatible embedding call.
 
-        Returns: numpy array of shape (len(texts), 768)
+        Returns: numpy array of shape (len(texts), embedding_dim)
         """
         if isinstance(texts, str):
             texts = [texts]
-        data = {"model": "text-embedding-nomic-embed-text-v1.5", "input": texts}
+        data = {"model": embedding_model_val, "input": texts}
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(f"{base_url}/v1/embeddings", json=data)
             if resp.status_code != 200:
@@ -131,6 +134,7 @@ class RAGEngineAdapter:
             enable_table_processing=False,
             enable_equation_processing=False,
             max_concurrent_files=1,
+            max_context_tokens=settings.rag_max_context_tokens,
             use_full_path=True,
         )
 
@@ -140,6 +144,14 @@ class RAGEngineAdapter:
             embedding_func=_create_embedding_func(),
             lightrag_kwargs={
                 "workspace": user_id,  # LightRAG data isolation key
+                # ── 性能优化: 降低并发、限制 token 数、收紧阈值 ──
+                "embedding_func_max_async": settings.embedding_workers,
+                "embedding_batch_num": 16,
+                "chunk_top_k": settings.rag_chunk_top_k,
+                "cosine_threshold": settings.rag_cosine_threshold,
+                "max_parallel_insert": 1,
+                "enable_llm_cache": True,
+                "enable_llm_cache_for_entity_extract": True,
             },
         )
 
@@ -303,8 +315,8 @@ class RAGEngineAdapter:
             param = QueryParam(
                 mode="naive",
                 only_need_context=True,
-                top_k=top_k * 2,  # fetch more, deduplicate below
-                chunk_top_k=top_k * 2,
+                top_k=settings.rag_chunk_top_k,
+                chunk_top_k=settings.rag_chunk_top_k,
                 enable_rerank=False,
             )
             result_text = await lightrag.aquery(query_text, param=param)

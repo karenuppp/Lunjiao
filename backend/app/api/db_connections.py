@@ -33,6 +33,7 @@ def _to_out(conn: DbConnection) -> DbConnectionOut:
         name=conn.name,
         host=conn.host,
         port=conn.port,
+        db_name=conn.db_name,
         table_name=conn.table_name,
         db_user=conn.db_user,
         environment=conn.environment,
@@ -58,6 +59,7 @@ def create_connection(payload: DbConnectionCreate, db: Session = Depends(get_db)
         name=payload.name,
         host=payload.host,
         port=payload.port,
+        db_name=payload.db_name or None,
         table_name=payload.table_name,
         db_user=payload.db_user,
         db_password=payload.db_password,
@@ -81,6 +83,7 @@ def test_connection(payload: DbConnectionTest):
         user=payload.db_user,
         password=payload.db_password,
         table_name=payload.table_name,
+        db_name=payload.db_name or None,
     )
     return TestResult(**result)
 
@@ -100,6 +103,7 @@ def test_saved_connection(conn_id: int, db: Session = Depends(get_db)):
         user=conn.db_user,
         password=conn.db_password,
         table_name=conn.table_name,
+        db_name=conn.db_name,
     )
 
     if result["success"]:
@@ -138,6 +142,7 @@ def connect_connection(conn_id: int, db: Session = Depends(get_db)):
         user=conn.db_user,
         password=conn.db_password,
         table_name=conn.table_name,
+        db_name=conn.db_name,
     )
 
     if result["success"]:

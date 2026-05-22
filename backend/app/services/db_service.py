@@ -63,12 +63,35 @@ def _build_url(host: str, port: int, user: str, password: str, db_name: str) -> 
 
 
 def test_connection(
-    host: str, port: int, user: str, password: str, table_name: str
+    host: str, port: int, user: str, password: str, table_name: str,
+    db_name: str | None = None,
 ) -> dict:
     """Test a database connection and return table fields.
 
+    If db_name is provided, connect directly; otherwise auto-discover.
     Returns {"success": bool, "message": str, "fields": [{"name": str, "type": str}]}
     """
+    if db_name:
+        db_url = _build_url(host, port, user, password, db_name)
+        engine = create_engine(db_url, connect_args={"connect_timeout": 5})
+        try:
+            with engine.connect() as conn:
+                rows = conn.execute(
+                    text("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = :db"),
+                    {"db": db_name},
+                ).fetchall()
+                tables = [row[0] for row in rows]
+                if table_name not in tables:
+                    return {"success": False, "message": f"数据库 '{db_name}' 中未找到表 '{table_name}'", "fields": []}
+            with engine.connect() as conn:
+                rows = conn.execute(text(f"SHOW COLUMNS FROM `{table_name}`")).fetchall()
+                fields = [{"name": row[0], "type": row[1]} for row in rows]
+            return {"success": True, "message": "连接成功！", "fields": fields}
+        except SQLAlchemyError as e:
+            return {"success": False, "message": f"连接失败：{str(e)}", "fields": []}
+        finally:
+            engine.dispose()
+
     # Try base connection first (connect to MySQL without db name to test credentials)
     try:
         base_url = f"mysql+pymysql://{user}:{password}@{host}:{port}?charset=utf8mb4"

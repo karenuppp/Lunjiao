@@ -11,6 +11,7 @@ class DbConnectionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=128, description="连接名称")
     host: str = Field(..., min_length=1, max_length=255, description="数据库地址")
     port: int = Field(default=3306, ge=1, le=65535, description="端口")
+    db_name: str = Field(default="", max_length=128, description="数据库名")
     table_name: str = Field(..., min_length=1, max_length=128, description="表名")
     db_user: str = Field(..., min_length=1, max_length=128, description="数据库用户名")
     db_password: str = Field(..., min_length=1, max_length=255, description="数据库密码")
@@ -22,6 +23,7 @@ class DbConnectionTest(BaseModel):
     name: str = Field(..., min_length=1, max_length=128)
     host: str = Field(..., min_length=1, max_length=255)
     port: int = Field(default=3306, ge=1, le=65535)
+    db_name: str = Field(default="", max_length=128)
     table_name: str = Field(..., min_length=1, max_length=128)
     db_user: str = Field(..., min_length=1, max_length=128)
     db_password: str = Field(..., min_length=1, max_length=255)
@@ -46,6 +48,7 @@ class DbConnectionOut(BaseModel):
     name: str
     host: str
     port: int
+    db_name: Optional[str] = None
     table_name: str
     db_user: str
     environment: str

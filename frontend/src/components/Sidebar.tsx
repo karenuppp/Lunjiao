@@ -36,9 +36,13 @@ export default function Sidebar({
       {}
       <div className="conv-list">
         {conversations.map((conv) => (
-          <div key={conv.id} className={`conv-item ${conv.id === activeConversationId ? 'active' : ''}`}>
+          <div
+            key={conv.id}
+            className={`conv-item ${conv.id === activeConversationId ? 'active' : ''}`}
+            onClick={() => onSwitchConversation(conv.id)}
+          >
             <Tooltip title={conv.title} mouseEnterDelay={0.8}>
-              <span onClick={() => onSwitchConversation(conv.id)} className="conv-title">
+              <span className="conv-title">
                 {conv.title}
               </span>
             </Tooltip>

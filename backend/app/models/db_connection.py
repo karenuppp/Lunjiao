@@ -14,6 +14,7 @@ class DbConnection(Base):
     name = Column(String(128), nullable=False, comment="连接名称")
     host = Column(String(255), nullable=False, comment="数据库地址")
     port = Column(Integer, default=3306, nullable=False, comment="端口")
+    db_name = Column(String(128), nullable=True, comment="数据库名")
     table_name = Column(String(128), nullable=False, comment="表名")
     db_user = Column(String(128), nullable=False, comment="数据库用户名")
     db_password = Column(String(255), nullable=False, comment="数据库密码 (明文)")

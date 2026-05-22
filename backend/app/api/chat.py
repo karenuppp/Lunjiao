@@ -7,8 +7,35 @@ import json
 from starlette.responses import StreamingResponse
 
 from app.agent.graph import run_agent_sync, run_agent_stream_simple
+from app.database import SessionLocal
+from app.models.user import User
 
 router = APIRouter()
+
+
+def _resolve_permissions(user_id: str) -> tuple[str, list[int] | None]:
+    """Resolve kb_scope / db_scope for a user from the DB.
+
+    Returns (kb_scope, db_scope).  Defaults to ('personal', None) when
+    user_id is 'default' or the user is not found.
+    """
+    kb_scope = "personal"
+    db_scope = None
+    if user_id and user_id != "default":
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.account == user_id).first()
+            if user:
+                kb_scope = user.kb_scope or "personal"
+                raw_db = user.db_scope
+                if raw_db:
+                    try:
+                        db_scope = json.loads(raw_db)
+                    except (json.JSONDecodeError, TypeError):
+                        db_scope = None
+        finally:
+            db.close()
+    return kb_scope, db_scope
 
 
 class ChatRequest(BaseModel):
@@ -72,10 +99,13 @@ async def chat(request: ChatRequest):
 
     # Call agent (default to "default" if user_id not provided for backward compat)
     user_id = request.user_id or "default"
+    kb_scope, db_scope = _resolve_permissions(user_id)
     result = run_agent_sync(
         question=request.message,
         history=agent_history or None,
         user_id=user_id,
+        kb_scope=kb_scope,
+        db_scope=db_scope,
     )
 
     # Store conversation
@@ -122,10 +152,13 @@ async def chat_stream(request: ChatRequest):
                 agent_history.append(msg)
 
         user_id = request.user_id or "default"
+        kb_scope, db_scope = _resolve_permissions(user_id)
         async for event_line in run_agent_stream_simple(
             question=request.message,
             history=agent_history or None,
             user_id=user_id,
+            kb_scope=kb_scope,
+            db_scope=db_scope,
         ):
             yield event_line
 

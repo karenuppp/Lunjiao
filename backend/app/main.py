@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+import os
 from app.api import chat, data_sources, history, upload, auth, db_connections, prompt
 from app.database import init_db
 from pathlib import Path
@@ -27,6 +28,13 @@ app.add_middleware(
 
 @app.on_event("startup")
 def startup():
+    # ── CPU 线程限制: 避免 embedding/NLP 库吃满全部核心 ──
+    os.environ.setdefault("OMP_NUM_THREADS", "4")
+    try:
+        import torch
+        torch.set_num_threads(4)
+    except ImportError:
+        pass
     init_db()
 
 

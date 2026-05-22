@@ -246,6 +246,7 @@ export interface DbConnectionRecord {
   port: number
   table_name: string
   db_user: string
+  db_name: string | null
   status: 'connected' | 'disconnected'
   table_fields: DbFieldInfo[] | null
   created_at: string
@@ -267,6 +268,7 @@ export async function createDbConnection(payload: {
   name: string
   host: string
   port: number
+  db_name: string
   table_name: string
   db_user: string
   db_password: string
@@ -284,6 +286,7 @@ export async function testDbConnection(payload: {
   name: string
   host: string
   port: number
+  db_name: string
   table_name: string
   db_user: string
   db_password: string
