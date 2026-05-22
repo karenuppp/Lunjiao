@@ -502,7 +502,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const currentUserId = userId || localStorage.getItem('lunjiao_user_id') || 'default'
     try {
       await fetch(`${BASE_URL}/upload/files/${fileId}?user_id=${encodeURIComponent(currentUserId)}`, { method: 'DELETE' })
-    } catch { /* ignore */ }
+    } catch {}
     dispatch({ type: 'REMOVE_UPLOADED_FILE', payload: fileId })
   }, [])
 
@@ -564,9 +564,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       // Mark each file as done or error based on result
       const updated: UploadProgressItem[] = pending.map((pf) => {
-        const match = result.files.find((f: any) => f.file_name === pf.name)
+        const match = result.files.find((f: any) => f.file_name === pf.name) as any
         if (match) {
-          // Use real extracted_files from the API response for archives
           const archiveChildren = match.is_archive && match.extracted_files?.length
             ? match.extracted_files.map((ef: any) => ({
                 name: ef.name,

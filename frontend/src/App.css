@@ -181,7 +181,6 @@ html, body {
   background: #FFFFFF; flex-shrink: 0;
 }
 
-/* Header navigation tabs */
 .header-tab {
   display: inline-flex; align-items: center;
   padding: 6px 14px; border: none; background: transparent;
@@ -217,7 +216,6 @@ html, body {
   scroll-behavior: smooth;
 }
 
-/* Message entry animation */
 .message { animation: fadeInUp var(--transition-slow) ease-out; }
 
 
@@ -383,7 +381,6 @@ html, body {
   padding: 16px 8px; height: 100%; display: flex; flex-direction: column; gap: 4px;
 }
 
-/* New conversation button */
 .new-chat-btn {
   width: 100%; padding: 10px 16px; border-radius: var(--radius-md);
   border: 1px solid var(--sidebar-border); background: var(--sidebar-hover);
@@ -395,7 +392,6 @@ html, body {
 
 .sidebar-divider { height: 1px; background: var(--sidebar-border); margin: 4px 8px; }
 
-/* Conversation list */
 .conv-list { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
 
 .conv-item {

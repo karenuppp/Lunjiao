@@ -29,7 +29,6 @@ def _load_system_prompt() -> str:
             return row.prompt_content
     finally:
         db.close()
-    # Fallback — built-in (copied from DEFAULT_SYSTEM_PROMPT in prompts.py)
     from app.agent.prompts import DEFAULT_SYSTEM_PROMPT
     return DEFAULT_SYSTEM_PROMPT
 
@@ -107,7 +106,6 @@ async def _run_react_loop(
     tool_schemas = get_schemas()
 
     if not tool_schemas:
-        # No tools registered — simple chat
         response = await client.chat.completions.create(
             model=model,
             messages=messages,
@@ -129,7 +127,6 @@ async def _run_react_loop(
         if not msg.tool_calls:
             return msg.content or "", list(data_sources)
 
-        # Execute tool calls
         for tc in msg.tool_calls:
             func_name = tc.function.name
             try:
@@ -137,13 +134,11 @@ async def _run_react_loop(
             except json.JSONDecodeError:
                 args = {}
 
-            # Track data sources
             if func_name == "query_rag":
                 data_sources.add("检索知识库")
             elif func_name in ("query_db", "list_db_tables"):
                 data_sources.add("查询数据库")
 
-            # Execute
             result = await execute_tool(
                 func_name, user_id=user_id,
                 kb_scope=kb_scope, db_scope=db_scope, **args,
@@ -161,7 +156,6 @@ async def _run_react_loop(
             }
             messages.append(assistant_msg)
 
-            # Append tool result
             messages.append({
                 "role": "tool",
                 "tool_call_id": tc.id,
@@ -242,7 +236,6 @@ async def run_agent_stream_simple(
         max_rounds = 5
 
         for round_idx in range(max_rounds + 1):
-            # --- Stream LLM response ---
             stream = await client.chat.completions.create(
                 model=model,
                 messages=messages,
@@ -261,12 +254,10 @@ async def run_agent_stream_simple(
                 if not delta:
                     continue
 
-                # Content tokens
                 if delta.content:
                     collected_content += delta.content
                     yield format_sse_event("token", {"text": delta.content})
 
-                # Tool call deltas
                 if delta.tool_calls:
                     for tc_delta in delta.tool_calls:
                         idx = tc_delta.index
@@ -285,13 +276,10 @@ async def run_agent_stream_simple(
                             if tc_delta.function and tc_delta.function.arguments:
                                 existing["args"] += tc_delta.function.arguments
 
-            # --- Process tool calls ---
             if not tool_calls_buf:
-                # No tool calls — this is the final answer
                 final_answer = collected_content
                 break
 
-            # Execute each tool
             for idx in sorted(tool_calls_buf.keys()):
                 tc = tool_calls_buf[idx]
                 func_name = tc["name"]
@@ -300,7 +288,6 @@ async def run_agent_stream_simple(
                 except json.JSONDecodeError:
                     args = {}
 
-                # Track data source
                 if func_name == "query_rag":
                     data_sources_detected.append("检索知识库")
                 elif func_name in ("query_db", "list_db_tables"):
@@ -333,7 +320,6 @@ async def run_agent_stream_simple(
                     "input": tc["args"],
                 })
 
-                # Execute
                 result = await execute_tool(
                     func_name, user_id=user_id,
                     kb_scope=kb_scope, db_scope=db_scope, **args,
@@ -344,7 +330,6 @@ async def run_agent_stream_simple(
                     "result_preview": result[:200],
                 })
 
-                # Append assistant message with tool call
                 messages.append({
                     "role": "assistant",
                     "content": collected_content,
@@ -358,14 +343,12 @@ async def run_agent_stream_simple(
                     }],
                 })
 
-                # Append tool result
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tc["id"],
                     "content": result,
                 })
 
-            # Clear for next round
             collected_content = ""
 
         else:
@@ -383,14 +366,12 @@ async def run_agent_stream_simple(
                     final_answer += delta.content
                     yield format_sse_event("token", {"text": delta.content})
 
-        # Emit data sources
         if data_sources_detected:
             yield format_sse_event(
                 "data_source",
                 {"sources": list(set(data_sources_detected))},
             )
 
-        # Emit final answer
         if final_answer:
             yield format_sse_event("final_answer", {"text": final_answer})
         else:

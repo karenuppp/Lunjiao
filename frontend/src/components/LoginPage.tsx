@@ -1,15 +1,3 @@
-/**
- * LoginPage — 伦教包登录页面
- *
- * Design direction: "Refined Institutional Portal"
- * Deep navy full-screen background mirrors the sidebar, creating a sense of
- * entering a secure workspace. The centered white card provides a clear
- * visual anchor with the brand name as a refined typographic statement.
- *
- * New: login is handled through chatStore — onLogin receives account+password
- * and returns a Promise. Navigation is handled by the caller (App.tsx).
- */
-
 import { useState } from 'react'
 import type { UserInfo } from '../types/chat'
 import './Login.css'
@@ -40,7 +28,6 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
     try {
       await onLogin(account.trim(), password.trim())
-      // Navigation handled by caller (App.tsx) after successful login
     } catch (err: any) {
       setError(err.message || '登录失败，请检查账号和密码')
     } finally {

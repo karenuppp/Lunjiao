@@ -1,220 +1,186 @@
-# Lunjiao - 部门智能问答系统
+# Lunjiao — 部门智能问答系统
 
-面向部门级的数据查询与分析工具，核心是"自然语言问，系统自动查数据、做分析"。
+面向部门级的自然语言数据查询与分析工具。用户用中文提问，系统自动检索知识库文档和数据库，生成回答。
 
-## 技术栈
+## 架构
 
-| 层 | 技术 |
+```
+  ┌─────────────────────────────────────────────┐
+  │  浏览器 (React SPA)                          │
+  │  端口 5173(dev) / FastAPI serve dist(prod)   │
+  └──────────────┬──────────────────────────────┘
+                 │ SSE 流式
+  ┌──────────────▼──────────────────────────────┐
+  │  FastAPI (uvicorn :8000)                     │
+  │  ├─ ReAct Agent (原生 OpenAI SDK)             │
+  │  ├─ RAG 引擎 (LightRAG)                       │
+  │  └─ MCP Client → :8023/:8024                │
+  └──────┬──────────┬──────────┬────────────────┘
+         │          │          │
+  ┌──────▼──┐ ┌─────▼───┐ ┌──▼─────────────┐
+  │  LLM    │ │  MySQL  │ │ MCP Servers     │
+  │  :1234  │ │  :3306  │ │ :8023 (upload)  │
+  │         │ │         │ │ :8024 (db)      │
+  └─────────┘ └─────────┘ └────────────────┘
+```
+
+- **前端**: React 18 + TypeScript + Ant Design 5 + Vite
+- **后端**: Python 3.11 + FastAPI + SSE 流式
+- **Agent**: 原生 OpenAI SDK — ReAct 循环 + Function Calling（无 LangChain/LangGraph）
+- **LLM**: OpenAI-compatible API（本地 LM Studio / vLLM / 任意兼容服务）
+- **Embedding**: text-embedding-nomic-embed-text-v1.5 (768 维)
+- **RAG**: RAG-Anything + LightRAG（naive 向量检索）
+
+## 本地开发
+
+### 前置条件
+
+- Python 3.11+, Node.js 22+
+- 本地 LLM 服务（OpenAI-compatible API，默认 `localhost:1234/v1`）
+- MySQL（默认 `localhost:3306`，库名 `lunjiao`）
+
+### 启动
+
+```bash
+# 1. 后端
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+
+# 2. MCP 服务（可选，Agent 工具调用依赖）
+python -m app.mcp_servers.db_server      # :8024
+python -m app.mcp_servers.upload_server  # :8023
+
+# 3. 前端
+cd frontend
+npm install
+npm run dev  # http://localhost:5173
+```
+
+## Docker 部署（离线环境）
+
+### 构建镜像
+
+在联网的开发机上构建：
+
+```bash
+# 在项目根目录
+docker build -t lunjiao:latest .
+```
+
+### 导出 / 导入
+
+```bash
+# 导出为 tar（传输到离线服务器）
+docker save lunjiao:latest | gzip > lunjiao.tar.gz
+
+# 在离线服务器上导入
+docker load < lunjiao.tar.gz
+```
+
+### 运行
+
+容器内只包含应用（FastAPI + 前端静态文件），以下组件需要外部提供：
+
+| 组件 | 默认地址 | 环境变量 |
+|---|---|---|
+| LLM API | `localhost:1234/v1` | `OPENAI_BASE_URL`, `MODEL_NAME` |
+| MySQL | `localhost:3306` | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` |
+| RAG API | `localhost:8023` | `RAG_API_BASE`, `RAG_API_KEY` |
+| MCP DB Server | `localhost:8024` | `MCP_SERVER_BASE` |
+
+```bash
+# 基本启动（全部使用默认值，适合本地模型在同一台机器上）
+docker run -d --name lunjiao --network host lunjiao:latest
+
+# 指定 LLM 地址
+docker run -d --name lunjiao --network host \
+  -e OPENAI_BASE_URL=http://192.168.1.100:1234/v1 \
+  -e MODEL_NAME=qwen3.6-27B \
+  lunjiao:latest
+```
+
+访问 `http://<服务器IP>:8000`。
+
+### 环境变量参考
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `OPENAI_API_KEY` | `lm-studio` | LLM API Key |
+| `OPENAI_BASE_URL` | `http://localhost:1234/v1` | LLM API 地址 |
+| `MODEL_NAME` | `qwen3.6-35B-A3B-apex` | 模型名称 |
+| `DB_HOST` | `localhost` | MySQL 地址 |
+| `DB_PORT` | `3306` | MySQL 端口 |
+| `DB_USER` | `root` | 数据库用户名 |
+| `DB_PASSWORD` | `123456` | 数据库密码 |
+| `DB_NAME` | `lunjiao` | 数据库名 |
+| `RAG_API_BASE` | `http://localhost:8023` | RAG 服务地址 |
+| `RAG_API_KEY` | (内置) | RAG API Key |
+| `MCP_SERVER_BASE` | `http://localhost:8024` | MCP DB 服务地址 |
+| `EMBEDDING_MODEL` | `text-embedding-nomic-embed-text-v1.5` | Embedding 模型 |
+| `EMBEDDING_DIM` | `768` | Embedding 维度 |
+
+### 离线服务器完整部署步骤
+
+假设离线服务器已安装 Docker，且有本地模型服务和 MySQL：
+
+```bash
+# 1. 导入镜像
+docker load < lunjiao.tar.gz
+
+# 2. 启动（根据实际模型和数据库地址调整）
+docker run -d --name lunjiao --restart unless-stopped --network host \
+  -e OPENAI_BASE_URL=http://localhost:1234/v1 \
+  -e MODEL_NAME=your-model-name \
+  -e DB_HOST=localhost \
+  -e DB_NAME=lunjiao \
+  lunjiao:latest
+
+# 3. 验证
+curl http://localhost:8000/api/health
+```
+
+## 页面结构
+
+```
+/               → 登录页（未认证时重定向至此）
+/chat           → AI 智能问答（所有用户）
+/knowledge-base → 知识库管理（所有用户）
+/admin/users    → 用户管理（管理员）
+/admin/database → 数据库管理（管理员）
+/admin/prompt   → 提示词管理（管理员）
+```
+
+## Agent 工具
+
+| 工具 | 功能 |
 |---|---|
-| 前端 | React 18 + TypeScript + Ant Design 5 + Vite + react-router-dom |
-| 后端 API | Python 3.11 + FastAPI (SSE 流式输出) |
-| Agent | 原生 OpenAI SDK — ReAct 循环 + Function Calling（无 LangChain/LangGraph） |
-| LLM | qwen3.6-35B-A3B-apex，本地 LM Studio (`localhost:1234/v1`) |
-| Embedding | text-embedding-nomic-embed-text-v1.7 (768 维) |
-| RAG 引擎 | RAG-Anything + LightRAG — MinerU PDF 解析、向量检索（naive 模式，无 KG 实体抽取） |
-| MCP 数据查询 | MCP Server — MySQL 只读查询 (端口 8024) / 上传文件查询 (端口 8025) |
-| 数据存储 | Zustand + localStorage 持久化；MySQL (后端) |
-
-## 页面路由与导航
-
-```
-/          → 登录页（未认证时所有页面重定向至此）
-/chat      → AI 智能问答（所有已认证用户）
-/knowledge-base → 知识库管理（所有已认证用户）
-/admin/users    → 用户管理（仅管理员）
-/admin/database → 数据库管理（仅管理员）
-/admin/prompt   → 提示词管理（仅管理员）
-```
-
-登录后进入 `/chat`，顶部统一导航栏包含：
-- **AI 智能问答** — ReAct Agent 对话 + SSE 流式输出
-- **知识库管理** — 文档上传、RAG 索引、文件列表管理
-- **用户管理** （仅管理员可见）— 新增/删除/改密用户账号，设置角色
-- **数据库管理** （仅管理员可见）— 数据库连接配置、测试、连接/断开管理
-- **提示词管理** （仅管理员可见）— 维护 AI 智能问答的 System Prompt
-
-右上角为退出按钮（带框体样式），点击清除认证状态并返回登录页。
-
-## Agent 架构
-
-```
-用户问题
-   │
-   ▼
-┌─────────────┐     tool_call      ┌──────────┐
-│  LLM (ReAct) ├─────────────────> │ MCP Server│
-│             │◄──────────────────  │ MySQL/上传 │
-│  多轮推理     │    tool result     │  文件查询   │
-└─────────────┘                     └──────────┘
-   │
-   ▼ RAG (query_rag) ──> RAG-Anything + LightRAG
-                          (文档知识库，MinerU 解析 PDF/Excel 等)
-```
-
-**三个知识源（Agent 决策优先级）：**
-1. **RAG 知识库** — `query_rag()`：上传的文档（PDF、Word、Excel、报告等），默认首选
-2. **数据库** — `query_db()` + `list_db_tables()`：MySQL 结构化数据，只读 SELECT
-3. **LLM 内置知识** — 当前两者无结果时的 fallback
+| `query_rag(query, category)` | RAG 文档语义检索 |
+| `query_db(sql)` | MySQL SQL 查询（只读 SELECT） |
+| `list_db_tables(category)` | 列出可用数据表 |
 
 ## 项目结构
 
 ```
 Lunjiao/
-├── frontend/                # React 应用 (Vite)
+├── frontend/                  # React 应用 (Vite)
 │   ├── src/
-│   │   ├── api/chat.ts      # API 客户端 (对话 SSE + 文件上传 + 用户管理)
-│   │   ├── store/chatStore.tsx  # Zustand 状态管理 + localStorage 持久化
-│   │   ├── types/chat.ts    # TypeScript 类型定义
-│   │   ├── components/
-│   │   │   ├── LoginPage.tsx         # 登录页 (账号密码认证)
-│   │   │   ├── Sidebar.tsx           # 侧边栏 (历史对话)
-│   │   │   ├── AppHeader.tsx         # 统一顶部导航 (标签 + 退出按钮)
-│   │   │   ├── ChatPanel.tsx         # AI 智能问答面板 (SSE 流式渲染)
-│   │   │   ├── AnalysisPanel.tsx     # 右侧分析面板
-│   │   │   └── KbManagePage.tsx      # 知识库管理页 (上传 + 文件列表表格)
-│   │   │   ├── UserManagePage.tsx    # 用户管理页 (管理员: 新增/删除/改密)
-│   │   │   ├── DbManagePage.tsx      # 数据库管理页 (管理员: 连接配置)
-│   │   │   └── PromptManagePage.tsx  # 提示词管理页 (管理员: System Prompt)
-│   │   ├── App.tsx          # 三栏式布局 (侧边栏 + 主对话区 + 分析面板)
-│   │   └── main.tsx         # 入口
+│   │   ├── api/chat.ts        # API 客户端
+│   │   ├── store/chatStore.tsx # 状态管理 + localStorage 持久化
+│   │   ├── types/chat.ts      # 类型定义
+│   │   └── components/        # 页面组件
 │   ├── package.json
 │   └── vite.config.ts
-├── backend/                 # Python 后端 (FastAPI)
+├── backend/                   # Python 后端
 │   ├── app/
-│   │   ├── main.py          # FastAPI 入口 + CORS + SSE 路由挂载
-│   │   ├── config.py        # Settings — LLM/MySQL/RAG/MCP 配置 (.env)
-│   │   ├── rag_engine.py    # RAGEngineAdapter — RAG-Anything + LightRAG 封装
-│   │   │                        · MinerU PDF 解析
-│   │   │                        · .txt/.md/.csv/.xlsx 直接文本提取（绕过 MinerU）
-│   │   │                        · LightRAG naive 向量检索 (无 KG)
-│   │   ├── api/             # API 路由
-│   │   │   ├── chat.py      # /api/chat/stream — SSE 流式对话 + /api/auth — 用户认证 CRUD
-│   │   │   ├── upload.py    # /api/upload — 文件上传 + RAG 索引
-│   │   │   ├── data_sources.py # 数据源管理 CRUD
-│   │   │   └── history.py   # 历史记录 (内存)
-│   │   ├── agent/           # Agent 核心 (原生 OpenAI SDK，无框架依赖)
-│   │   │   ├── graph.py     # SYSTEM_PROMPT + ReAct 循环 (sync/stream)
-│   │   │   ├── tools.py     # TOOL_FUNCTIONS: query_rag, query_db, list_db_tables
-│   │   │                        · OpenAI-style tool schema (JSON)
-│   │   │                        · HTTP client → MCP Server (MySQL/上传文件)
-│   │   │   └── prompts.py   # 系统提示词 (三知识源决策逻辑)
-│   │   ├── mcp_servers/     # MCP 独立服务器进程
-│   │   │   ├── db_server.py      # MySQL 只读查询 (端口 8024)
-│   │   │                        · POST /query — 安全 SELECT 执行
-│   │   │                        · POST /tables — 按类别列出表
-│   │   │                        · GET /health — 健康检查
-│   │   │   └── upload_server.py  # 上传文件查询 (端口 8025)
-│   │   │                        · POST /upload — 文件上传 + RAG 索引
-│   │   │                        · POST /query — 自然语言查上传文件
-│   │   │                        · GET /files — 列出已上传文件
-│   │   ├── skills/          # 分析/报告模块 (待开发)
-│   │   ├── models/          # 数据模型
-│   │   └── services/        # 业务服务
-│   ├── requirements.txt     # 依赖: fastapi, openai, mcp, raganything, pandas, sqlalchemy...
-│   ├── .env.example         # 环境变量模板
-│   └── venv/                # Python 虚拟环境 (gitignored)
-├── docs/
-│   └── 部署启动指南.md      # 完整部署说明
+│   │   ├── main.py            # FastAPI 入口
+│   │   ├── config.py          # 配置 (环境变量)
+│   │   ├── api/               # API 路由
+│   │   ├── agent/             # ReAct Agent
+│   │   ├── mcp_servers/       # MCP 独立服务
+│   │   └── models/            # 数据模型
+│   └── requirements.txt
+├── Dockerfile
+├── .dockerignore
 └── README.md
 ```
-
-## Agent 工具清单
-
-| 工具 | 功能 | 目标 |
-|---|---|---|
-| `query_rag(query, category)` | RAG 文档语义检索 | RAG-Anything (向量库) |
-| `query_db(sql, data_category)` | SQL 查询执行 | MCP DB Server (`:8024`) |
-| `list_db_tables(data_category)` | 列出可用表及行数 | MCP DB Server (`:8024`) |
-
-**数据类别映射：**
-- "设备" → `equipment` (设备信息、入库时间)
-- "事件" → `event` (事件名称、时间、人员)
-- "人事" → personnel 相关表
-- "财务" → finance 相关表
-- "全部" → 所有表
-
-## RAG 索引机制
-
-| 文件类型 | 处理方式 |
-|---|---|
-| `.txt`, `.md`, `.csv` | 直接文本提取 → LightRAG chunk upsert（跳过 MinerU，快速） |
-| `.xlsx`, `.xls` | openpyxl 逐行提取为文本 → LightRAG chunk upsert |
-| `.pdf`, `.docx`, `.pptx` | RAG-Anything MinerU 解析管线（完整文档处理） |
-
-## 快速启动
-
-### 前置条件
-
-1. **LM Studio** — 运行本地 LLM + Embedding Server
-   - LLM: `qwen3.6-35B-A3B-apex` (或兼容的 OpenAI API)
-   - Embedding: `text-embedding-nomic-embed-text-v1.7`
-   - 地址: `http://localhost:1234/v1`
-
-2. **MySQL** — 部门数据库 (`lunjiao`)，已配置表结构
-
-### 后端
-
-```bash
-cd backend
-source venv/bin/activate          # 激活虚拟环境
-uvicorn app.main:app --reload --port 8000   # API Server
-```
-
-MCP 数据库服务器（连接 MySQL）：
-```bash
-python -m app.mcp_servers.db_server    # 端口 8024
-```
-
-### 前端
-
-```bash
-cd frontend
-npm run dev     # http://localhost:5173
-```
-
-## 功能模块
-
-- **自然语言对话** — SSE 流式输出，Agent ReAct 推理 + 工具调用可视化
-- **RAG 文档知识库** — CSV/XLSX/txt/md/PDF/Word 上传 → 自动索引 → 语义检索
-- **MySQL 数据查询** — MCP Server 提供安全的只读 SELECT 查询，按部门类别筛选
-- **多源融合回答** — Agent 自动判断使用 RAG、数据库或两者结合
-- **三栏式布局** — 侧边栏（历史对话）+ 主对话区 + 分析面板
-- **管理后台** — 用户管理、数据库连接管理、System Prompt 编辑（仅管理员）
-- **SSE 流式输出** — 打字机效果实时展现 AI 回答，支持工具调用过程可视化
-
-## 开发状态
-
-### Phase 1 ✅ — 基础框架搭建
-- [x] 前端项目 (Vite + React + TypeScript + Ant Design)
-- [x] 后端 FastAPI (API 路由、CORS、SSE 支持)
-- [x] 三栏布局：侧边栏 + 主对话区 + 分析面板
-
-### Phase 2 ✅ — 对话核心 + 前端交互完善
-- [x] SSE 流式对话接口 (`/api/chat/stream`)
-- [x] Agent ReAct 工作流 (OpenAI tool-calling)
-- [x] 数据类别选择 (人事/设备/财务/全部)
-- [x] 对话气泡样式：用户居右（蓝色渐变）、助手居左（白色卡片）
-- [x] 底部输入区：多行文本框 + 类别切换 + 发送按钮
-- [x] 文件上传：拖拽/点击 + 文件列表 + 索引状态指示
-- [x] localStorage 持久化 (对话、会话、上传文件)
-
-### Phase 3 ✅ — MCP 数据查询服务器
-- [x] MCP Database Server (`db_server.py`) — MySQL 只读查询
-  - POST /query — 执行安全 SELECT 查询
-  - POST /tables — 按类别列出表及行数
-  - GET /health — 健康检查
-- [x] MCP Upload Server (`upload_server.py`) — 上传文件查询
-  - POST /upload — 上传 + RAG 索引
-  - POST /query — 自然语言查文件内容
-  - GET /files — 列出已上传文件
-
-### Phase 4 ✅ — 管理后台
-- [x] 用户管理 (CRUD + 角色分配)
-- [x] 数据库连接管理 (增删 + 测试连接 + 连接状态)
-- [x] 提示词管理 (System Prompt 在线编辑与回滚)
-
-### 即将开发
-- [ ] Phase 5: Skill 分析/报告/可视化模块
-- [ ] Phase 6: 连接真实部门数据源 (MySQL 表对接)
-- [ ] Phase 7: 分析面板 + 报告导出
-- [ ] Phase 8: 优化与生产部署

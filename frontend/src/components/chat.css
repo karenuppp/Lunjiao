@@ -11,10 +11,8 @@
   gap: 10px;
 }
 
-/* User messages: avatar on right, bubble on right */
 .message.user { flex-direction: row-reverse; }
 
-/* Assistant messages: avatar on left, text on left */
 .message.assistant { flex-direction: row; }
 
 
@@ -61,7 +59,6 @@
 /* ---------- Assistant message (no bubble, pure text) ---------- */
 .message.assistant .message-bubble { padding: 2px 0; line-height: 1.75; color: #2C2D3A; }
 
-/* Markdown content in assistant messages */
 .message.assistant .message-bubble h1,
 .message.assistant .message-bubble h2,
 .message.assistant .message-bubble h3 {
@@ -194,7 +191,6 @@
   align-items: center; justify-content: center; flex-shrink: 0;
 }
 
-/* File type colors */
 .context-file-chip.file-red  .cf-icon { background: #FEE2E2; color: #EF4444; }
 .context-file-chip.file-blue .cf-icon { background: #DBEAFE; color: #3B82F6; }
 .context-file-chip.file-green .cf-icon { background: #DCFCE7; color: #22C55E; }
@@ -230,13 +226,10 @@
 .send-btn.active:hover { opacity: 0.92; transform: translateY(-1px); }
 
 
-/* ---------- Input wrapper layout (Chat Panel) ---------- */
 .input-wrapper { display: flex; align-items: center; gap: 8px; }
 
-/* ---------- Hidden file input ---------- */
 .hidden-file-input { display: none; }
 
-/* ---------- Attach (paperclip) button ---------- */
 .attach-btn {
   display: inline-flex; align-items: center; justify-content: center;
   width: 34px; height: 34px; flex-shrink: 0;

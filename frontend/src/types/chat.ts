@@ -129,8 +129,8 @@ export type KbTab = 'upload' | 'files'
 
 /** A file selected by user but not yet uploaded */
 export interface PendingFile {
-  uid: string             // unique local id for list rendering
-  file: File              // browser File object
+  uid: string
+  file: File
   name: string
   size: number
   isArchive: boolean      // whether it's a compressed archive (.zip/.rar/.7z/.tar.gz)

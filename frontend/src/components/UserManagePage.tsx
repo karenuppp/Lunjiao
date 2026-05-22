@@ -1,14 +1,3 @@
-/**
- * UserManagePage — 管理员用户管理页面
- *
- * Features:
- * - List all users with their account, role
- * - Form to add new user (account, password, role)
- * - Delete user (with confirmation modal)
- * - Change password
- * - Set query permission (KB scope + DB scope)
- */
-
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Table, Input, Select, message, Modal, Button, Radio, Checkbox, Spin } from 'antd'
@@ -22,7 +11,7 @@ import {
   getUserQueryPermission,
   setUserQueryPermission,
 } from '../api/chat'
-import type { UserRecord, DbConnectionRecord, QueryPermission } from '../api/chat'
+import type { UserRecord, DbConnectionRecord } from '../api/chat'
 
 /* ── knowledge base scope labels ── */
 const KB_SCOPE_LABELS: Record<string, string> = {

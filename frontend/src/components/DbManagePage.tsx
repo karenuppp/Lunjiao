@@ -164,6 +164,7 @@ export default function DbManagePage() {
     { title: '连接名称', dataIndex: 'name', key: 'name', width: 140 },
     { title: '数据库地址', dataIndex: 'host', key: 'host', width: 150 },
     { title: '端口', dataIndex: 'port', key: 'port', width: 70 },
+    { title: '数据库名', dataIndex: 'db_name', key: 'db_name', width: 120, render: (val: string | null) => val || '-' },
     { title: '表名', dataIndex: 'table_name', key: 'table_name', width: 140 },
     {
       title: '连接状态',

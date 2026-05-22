@@ -1,0 +1,45 @@
+# Docker
+Dockerfile
+.dockerignore
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# AI
+.changeset/
+.codex/
+.cursor/
+.windsurfrules/
+.hermes/
+
+# Docs
+docs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads & RAG
+uploads/
+*.meta
+
+# Logs
+*.log
+
+# Env
+.env
+.env.local

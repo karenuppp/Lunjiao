@@ -35,8 +35,6 @@ async def query_rag(query_text: str, category: str = "", top_k: int = 5,
     Personal knowledge base is ALWAYS accessible — kb_scope only controls
     whether public documents are added on top.
     """
-    # Everyone can access their own personal KB.
-    # kb_scope == "public" → also search public docs (user_id="default").
     include_public = (kb_scope == "public")
 
     category_param = category if category else None
@@ -50,13 +48,10 @@ async def query_rag(query_text: str, category: str = "", top_k: int = 5,
         return list(results) if results else []
 
     try:
-        # Always search personal docs
         all_results = await _do_search(user_id)
 
-        # If admin granted public access, also search public docs
         if include_public and user_id != "default":
             public_results = await _do_search("default")
-            # Merge, deduplicate by text content
             seen = {r.get("text", "") for r in all_results}
             for r in public_results:
                 if r.get("text", "") not in seen:
@@ -90,7 +85,7 @@ async def query_rag(query_text: str, category: str = "", top_k: int = 5,
 def _check_db_access(connection_id: int, db_scope: list[int] | None) -> bool:
     """Return True if connection_id is within the allowed db_scope."""
     if db_scope is None:
-        return True  # null = all allowed (admin hasn't set restrictions)
+        return True
     return connection_id in db_scope
 
 

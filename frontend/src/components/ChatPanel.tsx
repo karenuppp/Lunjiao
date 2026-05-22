@@ -24,8 +24,6 @@ interface ChatPanelProps {
   onSendChat: (message: string, contextFiles?: ContextFile[]) => void
 }
 
-// ---- Helpers ----
-
 let fileIdCounter = 0
 
 function formatFileSize(bytes: number): string {
@@ -67,12 +65,10 @@ export default function ChatPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Auto scroll
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, isLoading])
 
-  // Auto resize textarea
   useEffect(() => {
     const el = textareaRef.current
     if (!el) return
@@ -82,7 +78,6 @@ export default function ChatPanel({
 
   const canSend = (input.trim().length > 0 || contextFiles.length > 0) && !isLoading
 
-  // ---- Drag & Drop handlers ----
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -127,7 +122,6 @@ export default function ChatPanel({
     setContextFiles(prev => prev.filter(f => f.id !== fileId))
   }, [])
 
-  // ---- File picker (paperclip icon) ----
   const handlePaperclipClick = () => {
     fileInputRef.current?.click()
   }
@@ -148,7 +142,6 @@ export default function ChatPanel({
     e.target.value = ''
   }
 
-  // ---- Send ----
   const handleSend = () => {
     if (!canSend) return
     onSendChat(input.trim(), contextFiles.length > 0 ? contextFiles : undefined)
@@ -163,7 +156,6 @@ export default function ChatPanel({
     }
   }
 
-  // ---- Render ----
   return (
     <div className="chat-area">
       <div className="chat-messages">

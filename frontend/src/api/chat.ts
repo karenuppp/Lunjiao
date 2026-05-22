@@ -79,7 +79,7 @@ export function sendChatStream(
             } else if (part.startsWith('data: ')) {
               try {
                 jsonData = JSON.parse(part.slice(6))
-              } catch { /* ignore non-JSON */ }
+              } catch {}
             }
           }
 

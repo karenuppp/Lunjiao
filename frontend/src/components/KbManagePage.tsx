@@ -1,14 +1,7 @@
-/**
- * KbManagePage — 知识库管理页面（融合式单页面）
- *
- * 布局：顶部工具栏 → 可折叠检索参数面板 → 文件表格
- * 上传为 Modal 弹窗触发，不再使用独立标签页。
- */
-
 import React, { useState, useRef, useCallback } from 'react'
 import {
   Input, Button, Table, Modal, Tag, Empty,
-  Space, Tooltip, message,
+  Tooltip, message,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { InputRef } from 'antd'
