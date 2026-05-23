@@ -1,16 +1,3 @@
-"""
-Admin endpoint — manage AI prompt templates.
-
-GET    /api/prompt          → return current active prompt text (backward-compat)
-PUT    /api/prompt          → update the active prompt (backward-compat)
-POST   /api/prompt/reset    → reset active prompt to built-in default
-
-GET    /api/prompts         → list all prompt templates
-POST   /api/prompts         → create a new template
-PUT    /api/prompts/{id}    → update a template
-DELETE /api/prompts/{id}    → delete a template (cannot delete "default")
-"""
-
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -18,14 +5,11 @@ from app.database import SessionLocal
 from app.models.system_prompt import SystemPrompt
 from app.agent.prompts import DEFAULT_SYSTEM_PROMPT
 
-# ── Two routers: one for the legacy active-prompt endpoint, one for template CRUD ──
-router = APIRouter()           # mounted at /api/prompt  (backward-compat)
-templates_router = APIRouter() # mounted at /api/prompts (multi-template CRUD)
+router = APIRouter()
+templates_router = APIRouter()
 
 DEFAULT_KEY = "default"
 
-
-# ── Pydantic schemas ──────────────────────────────────────────
 
 class PromptPayload(BaseModel):
     content: str
@@ -40,8 +24,6 @@ class TemplateUpdate(BaseModel):
     title: str | None = None
     content: str | None = None
 
-
-# ── Helpers ───────────────────────────────────────────────────
 
 def _get_or_create_default(db) -> SystemPrompt:
     row = db.query(SystemPrompt).filter(
@@ -61,10 +43,6 @@ def _get_or_create_default(db) -> SystemPrompt:
         db.commit()
     return row
 
-
-# ═══════════════════════════════════════════════════════════════
-# Legacy single-prompt endpoints (mounted at /api/prompt)
-# ═══════════════════════════════════════════════════════════════
 
 @router.get("")
 def get_prompt() -> dict:
@@ -115,10 +93,6 @@ def reset_prompt() -> dict:
     finally:
         db.close()
 
-
-# ═══════════════════════════════════════════════════════════════
-# Multi-template CRUD (mounted at /api/prompts)
-# ═══════════════════════════════════════════════════════════════
 
 @templates_router.get("")
 def list_templates() -> list[dict]:

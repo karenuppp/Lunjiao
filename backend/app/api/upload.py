@@ -1,14 +1,3 @@
-"""
-File upload endpoint.
-
-Two-step flow:
-  1. Client uploads file -> FastAPI saves to uploads/ dir, returns file_id
-  2. Backend indexes the file using RAGAnything (async)
-
-Supported formats: PDF, DOCX, XLSX, TXT, CSV, MD (parsed by RAGAnything)
-Archives (.zip, .tar.gz, .tgz, .rar, .7z) are auto-extracted and child files indexed individually.
-"""
-
 import os
 import uuid
 import json
@@ -47,18 +36,14 @@ class UploadListResponse(BaseModel):
     files: list[UploadResponse]
 
 
-# Track indexed files in-memory (replace with DB later)
-# This dictionary persists file metadata; on restart it's rebuilt by scanning uploads/
 _indexed_files: dict[str, UploadResponse] = {}
 
 
 def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
-    """Scan the uploads/ directory and rebuild _indexed_files from actual files on disk."""
     upload_dir = Path(settings.upload_dir)
     if not upload_dir.exists():
         return {}
 
-    # Pre-load metadata from companion .meta files
     meta_files: dict[str, dict] = {}
     for meta_f in upload_dir.glob("*.meta"):
         try:
@@ -71,20 +56,13 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
     for fpath in upload_dir.iterdir():
         if not fpath.is_file():
             continue
-        # Skip internal directories/files (hidden)
         if fpath.name.startswith("."):
             continue
-        # Skip .meta files themselves
         if fpath.suffix == ".meta":
             continue
-        # Extract file_id from the filename pattern: file-{uuid}_originalname.ext or file-{uuid}.ext
         fname = fpath.name
         if fname.startswith("file-") and "." in fname:
-            # New format: file-XXX_originalname.ext → file_id = "file-XXX"
-            # Old format: file-XXX.ext → file_id = "file-XXX"
-            file_id = fname.rsplit(".", 1)[0]  # strip extension
-            # If it has underscore after the uuid part, split off original filename
-            # file_id is everything before the first underscore after "file-"
+            file_id = fname.rsplit(".", 1)[0]
             parts = file_id.split("_", 1)
             if len(parts) > 1 and len(parts[0]) > 5 and parts[0].startswith("file-"):
                 file_id = parts[0]
@@ -93,12 +71,10 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
 
         ext = fpath.suffix.lower().lstrip(".")
 
-        # Recover original name: prefer .meta, then extract from filename, then fallback
         meta = meta_files.get(file_id, {})
         if meta.get("original_name"):
             original_name = meta["original_name"]
         else:
-            # Try to extract original name from filename: file-XXX_myfile.md → "myfile"
             stem = fpath.stem
             if "_" in stem and stem.startswith("file-"):
                 original_name = stem.split("_", 1)[1] + fpath.suffix
@@ -106,7 +82,7 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
                 original_name = meta["original_name"]
             else:
                 original_name = fpath.name
-        category = meta.get("category", "上传文件")
+        category = meta.get("category", "")
         uploaded_at = meta.get("uploaded_at",
                                datetime.fromtimestamp(fpath.stat().st_mtime).isoformat())
         file_user_id = meta.get("user_id", "default")
@@ -130,11 +106,6 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
 
 
 async def _index_file_local(file_id: str, file_path: str, file_name: str, category: str, user_id: str = "default") -> tuple[str, int, str]:
-    """Index the uploaded file using RAGAnything (async).
-
-    Returns:
-        (rag_status, chunk_count, error_message)
-    """
     try:
         doc_id = await rag.index_file(
             file_path=file_path,
@@ -152,7 +123,6 @@ async def _index_file_local(file_id: str, file_path: str, file_name: str, catego
 
 
 def _update_meta_rag_status(upload_dir: Path, file_id: str, rag_status: str, chunk_count: int = 0) -> None:
-    """Update the .meta companion file with the final indexing status."""
     meta_path = upload_dir / f"{file_id}.meta"
     try:
         if meta_path.exists():
@@ -168,36 +138,25 @@ def _update_meta_rag_status(upload_dir: Path, file_id: str, rag_status: str, chu
         pass
 
 
-# ---- Archive Extraction Helpers ----
-
 ARCHIVE_EXTENSIONS = {".zip", ".rar", ".7z", ".tar.gz", ".tgz"}
 
 
 def _is_archive(filename: str) -> bool:
-    """Check if filename has an archive extension."""
     lower = filename.lower()
     return any(lower.endswith(ext) for ext in ARCHIVE_EXTENSIONS)
 
 
 def _extract_archive(file_path: str, extract_dir: str) -> list[str]:
-    """Extract an archive to a directory. Returns list of extracted file paths.
-
-    Supports zip (built-in), tar.gz/tgz (built-in), rar (rarfile), 7z (py7zr).
-    Raises RuntimeError with a user-friendly message on failure.
-    """
     lower = Path(file_path).name.lower()
     extracted: list[str] = []
 
-    # --- .zip (Python built-in) ---
     if lower.endswith(".zip"):
         import zipfile
         try:
             with zipfile.ZipFile(file_path, "r") as zf:
                 for member in zf.namelist():
-                    # Skip directories and macOS metadata
                     if member.endswith("/") or "__MACOSX" in member or member.startswith("."):
                         continue
-                    # Flatten: extract to extract_dir, use basename to avoid path traversal
                     target_name = Path(member).name
                     if not target_name:
                         continue
@@ -209,7 +168,6 @@ def _extract_archive(file_path: str, extract_dir: str) -> list[str]:
         except Exception as e:
             raise RuntimeError(f"ZIP 解压失败: {e}")
 
-    # --- .tar.gz / .tgz (Python built-in) ---
     if lower.endswith(".tar.gz") or lower.endswith(".tgz"):
         import tarfile
         try:
@@ -228,7 +186,6 @@ def _extract_archive(file_path: str, extract_dir: str) -> list[str]:
         except Exception as e:
             raise RuntimeError(f"TAR.GZ 解压失败: {e}")
 
-    # --- .rar (requires rarfile + unrar) ---
     if lower.endswith(".rar"):
         try:
             import rarfile
@@ -250,7 +207,6 @@ def _extract_archive(file_path: str, extract_dir: str) -> list[str]:
         except Exception as e:
             raise RuntimeError(f"RAR 解压失败: {e}")
 
-    # --- .7z (requires py7zr) ---
     if lower.endswith(".7z"):
         try:
             import py7zr
@@ -274,7 +230,6 @@ def _extract_archive(file_path: str, extract_dir: str) -> list[str]:
 
 
 def _validate_file_type(filename: str, allowed: list[str]) -> str:
-    """Validate that filename has an allowed extension. Returns the extension."""
     ext = Path(filename).suffix.lower()
     if ext not in allowed:
         raise HTTPException(
@@ -292,12 +247,6 @@ async def _process_single_file(
     allowed_extensions: list[str],
     user_id: str = "default",
 ) -> UploadResponse:
-    """Save a single file to disk, write .meta, trigger async RAG indexing, and return response.
-
-    For archives (.zip/.rar/.7z/.tar.gz/.tgz): extracts to a temp directory, then
-    indexes each extracted file individually. Extracted files must match allowed_extensions
-    (excluding archive formats themselves).
-    """
     ext = _validate_file_type(filename, allowed_extensions)
     file_size = len(content)
 
@@ -317,7 +266,6 @@ async def _process_single_file(
 
     timestamp = datetime.now().isoformat()
 
-    # Write companion .meta file
     meta_path = upload_dir / f"{file_id}.meta"
     try:
         with open(meta_path, "w", encoding="utf-8") as mf:
@@ -330,9 +278,7 @@ async def _process_single_file(
     except Exception:
         pass
 
-    # ── Archive handling ──
     if _is_archive(filename):
-        # Build list of non-archive allowed extensions for extracted files
         child_allowed = [e for e in allowed_extensions if e not in ARCHIVE_EXTENSIONS
                          and not any(e.endswith(ae) for ae in ARCHIVE_EXTENSIONS)]
 
@@ -341,9 +287,7 @@ async def _process_single_file(
         try:
             extracted_paths = _extract_archive(str(save_path), temp_dir)
         except RuntimeError as e:
-            # Archive extraction failed — clean up and return error
             shutil.rmtree(temp_dir, ignore_errors=True)
-            # Update .meta file with failed status
             _update_meta_rag_status(upload_dir, file_id, "failed", 0)
             return UploadResponse(
                 file_id=file_id,
@@ -360,7 +304,6 @@ async def _process_single_file(
 
         if not extracted_paths:
             shutil.rmtree(temp_dir, ignore_errors=True)
-            # Update .meta file with failed status
             _update_meta_rag_status(upload_dir, file_id, "failed", 0)
             return UploadResponse(
                 file_id=file_id,
@@ -375,13 +318,11 @@ async def _process_single_file(
                 extracted_files=[{"name": "空压缩包", "status": "error", "error": "压缩包内无文件"}],
             )
 
-        # Index each extracted file
         total_chunks = 0
         any_indexed = False
         for child_path in extracted_paths:
             child_name = Path(child_path).name
             child_ext = Path(child_path).suffix.lower()
-            # Check if child file type is allowed
             if child_ext not in child_allowed:
                 extracted_files.append({
                     "name": child_name,
@@ -420,13 +361,10 @@ async def _process_single_file(
             extracted_files=extracted_files,
         )
 
-        # Update .meta file with final rag_status
         _update_meta_rag_status(upload_dir, file_id, response.rag_status, response.chunk_count)
 
         return response
 
-    # ── Non-archive (regular file) ──
-    # Trigger async RAG indexing
     rag_task = asyncio.create_task(
         _index_file_local(file_id, str(save_path), filename, category, user_id)
     )
@@ -441,7 +379,6 @@ async def _process_single_file(
         rag_status="pending",
     )
 
-    # Wait for RAG indexing (max 60s per file)
     try:
         rag_status, chunk_count, rag_error = await asyncio.wait_for(rag_task, timeout=60.0)
         response.rag_status = rag_status
@@ -451,7 +388,6 @@ async def _process_single_file(
         response.rag_status = "failed"
         response.rag_error = "索引超时（60 秒），可能嵌入服务未启动或文件过大"
 
-    # Update .meta file with final rag_status
     _update_meta_rag_status(upload_dir, file_id, response.rag_status, response.chunk_count)
 
     _indexed_files[file_id] = response
@@ -461,14 +397,9 @@ async def _process_single_file(
 @router.post("", response_model=UploadResponse)
 async def upload_file(
     file: UploadFile = File(...),
-    category: str = Form("上传文件"),
+    category: str = Form(""),
     user_id: str = Form("default"),
 ):
-    """Upload a file. Accepts any format -- will be parsed and indexed by RAGAnything.
-
-    Args:
-        user_id: User identifier for knowledge base isolation (default "default").
-    """
     if not file.filename:
         raise HTTPException(400, "No file provided")
 
@@ -486,14 +417,9 @@ async def upload_file(
 @router.post("/batch")
 async def upload_files_batch(
     files: list[UploadFile] = File(...),
-    category: str = Form("上传文件"),
+    category: str = Form(""),
     user_id: str = Form("default"),
 ):
-    """Upload multiple files at once. No limit on number of files.
-
-    Args:
-        user_id: User identifier for knowledge base isolation (default "default").
-    """
     if not files:
         raise HTTPException(400, "No files provided")
 
@@ -533,27 +459,16 @@ async def list_uploaded_files(
     user_id: str = "default",
     keyword: str = "",
 ):
-    """List uploaded files with optional filtering.
-
-    Args:
-        scope: 'public' shows only default (department) files,
-               'personal' shows only the current user's files,
-               'all' shows everything.
-        user_id: The current user's ID (used when scope='personal').
-        keyword: Optional filename filter (case-insensitive substring match).
-    """
     rebuilt = _rebuild_index_from_disk()
 
     filtered: list[UploadResponse] = []
     for f in rebuilt.values():
-        # Scope filtering
         if scope == "public":
             if f.user_id != "default":
                 continue
         elif scope == "personal":
             if f.user_id != user_id:
                 continue
-        # keyword search
         if keyword and keyword.lower() not in f.file_name.lower():
             continue
         filtered.append(f)
@@ -563,7 +478,6 @@ async def list_uploaded_files(
 
 @router.get("/stats")
 async def rag_stats(user_id: str = "default"):
-    """Get RAG engine statistics for a specific user."""
     try:
         stats = await rag.stats(user_id=user_id)
         return stats or {"message": "RAG not yet initialized"}
@@ -573,11 +487,6 @@ async def rag_stats(user_id: str = "default"):
 
 @router.put("/files/{file_id}/category")
 async def update_file_category(file_id: str, category: str = Form(...)):
-    """Update the category tag of a previously uploaded file.
-
-    Writes the new category to the companion .meta file so the tag
-    persists across server restarts.
-    """
     upload_dir = Path(settings.upload_dir)
     meta_path = upload_dir / f"{file_id}.meta"
 
@@ -598,19 +507,14 @@ async def update_file_category(file_id: str, category: str = Form(...)):
 
 @router.delete("/files/{file_id}")
 async def delete_uploaded_file(file_id: str, user_id: str = "default"):
-    """Delete an uploaded file and remove from RAG index."""
     upload_dir = Path(settings.upload_dir)
 
-    # Find the actual file on disk — match file_id as prefix of the stem
-    # Old format: file-53053b325f49.md  → stem = "file-53053b325f49"
-    # New format: file-53053b325f49_mo.md → stem = "file-53053b325f49_mo"
     deleted_any = False
     for fpath in upload_dir.iterdir():
         if not fpath.is_file():
             continue
         if fpath.name.startswith("."):
             continue
-        # Match file_id as prefix of the stem (e.g. "file-53053b325f49" matches "file-53053b325f49" or "file-53053b325f49_mo")
         if fpath.stem.startswith(file_id):
             fpath.unlink()
             deleted_any = True
@@ -618,10 +522,8 @@ async def delete_uploaded_file(file_id: str, user_id: str = "default"):
     if not deleted_any:
         raise HTTPException(404, f"File {file_id} not found")
 
-    # Remove from RAG index
     await rag.remove_file(file_id, user_id=user_id)
 
-    # Also clean up in-memory cache
     if file_id in _indexed_files:
         del _indexed_files[file_id]
 

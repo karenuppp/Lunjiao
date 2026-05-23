@@ -182,7 +182,6 @@ export default function AnalysisPanel({ onClose }: AnalysisPanelProps) {
         height: '100vh',
       }}
     >
-      {}
       <div
         style={{
           display: 'flex',
@@ -199,7 +198,6 @@ export default function AnalysisPanel({ onClose }: AnalysisPanelProps) {
         <Button type="text" icon={<CloseOutlined />} onClick={onClose} size="small" />
       </div>
 
-      {/* Tabs */}
       <div style={{ flex: 1, overflow: 'auto', padding: '0 12px' }}>
         <Tabs
           activeKey={activeTab}
@@ -210,7 +208,6 @@ export default function AnalysisPanel({ onClose }: AnalysisPanelProps) {
         />
       </div>
 
-      {/* Bottom: Export All */}
       <div
         style={{
           padding: '12px',

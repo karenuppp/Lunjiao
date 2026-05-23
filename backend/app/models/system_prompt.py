@@ -1,10 +1,3 @@
-"""
-System prompt model — stores prompt templates in the database.
-
-Admin users can manage prompt templates via the admin panel.
-The "default" template is used as the active system prompt for the agent.
-"""
-
 from __future__ import annotations
 
 from app.database import Base
@@ -13,7 +6,6 @@ from sqlalchemy.sql import func
 
 
 class SystemPrompt(Base):
-    """Prompt template table — supports multiple named templates."""
 
     __tablename__ = "system_prompt"
 

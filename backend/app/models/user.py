@@ -1,12 +1,4 @@
-"""
-User ORM model — 用户表
-
-Fields:
-  id       — 自增主键（序号）
-  account  — 账号 (UK)
-  password — 密码（明文存储，后续改为 bcrypt）
-"""
-from sqlalchemy import Column, Integer, String, BigInteger, Text
+from sqlalchemy import Column, Integer, String, BigInteger, Text, Boolean
 from app.database import Base
 
 
@@ -20,6 +12,8 @@ class User(Base):
     # 查询权限
     kb_scope = Column(String(16), nullable=False, default="personal", comment="知识库查询范围: public | personal | none")
     db_scope = Column(Text, nullable=True, comment="数据库查询范围 (JSON array of connection IDs)")
+    # 经验提取权限
+    exp_extract_enabled = Column(Boolean, nullable=False, default=False, comment="是否允许该用户的点赞回答触发经验提取")
 
     def __repr__(self):
         return f"<User id={self.id} account={self.account}>"

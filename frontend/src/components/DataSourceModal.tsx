@@ -21,7 +21,6 @@ interface DataSource {
   description?: string
 }
 
-// Data sources fetched from backend API
 async function fetchDataSourceList(): Promise<DataSource[]> {
   try {
     const res = await fetch('/api/data-sources/')
@@ -29,7 +28,6 @@ async function fetchDataSourceList(): Promise<DataSource[]> {
     const data: DataSource[] = await res.json()
     return data
   } catch {
-    // Fallback to default sources when backend unavailable
     return [
       { id: 'db-hr', name: '人事数据库', type: 'database', status: 'connected', description: '员工信息、组织结构、考勤数据' },
       { id: 'db-equipment', name: '设备数据库', type: 'database', status: 'connected', description: '设备台账、维修记录、运行状态' },
@@ -38,7 +36,6 @@ async function fetchDataSourceList(): Promise<DataSource[]> {
   }
 }
 
-// Default data sources (used when backend is unavailable)
 const _defaultSources: DataSource[] = [
   { id: 'db-hr', name: '人事数据库', type: 'database', status: 'connected', description: '员工信息、组织结构、考勤数据' },
   { id: 'db-equipment', name: '设备数据库', type: 'database', status: 'connected', description: '设备台账、维修记录、运行状态' },

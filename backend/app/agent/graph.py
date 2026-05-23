@@ -1,9 +1,3 @@
-"""
-ReAct Agent for department Q&A.
-
-Uses native OpenAI SDK (no langchain). Manual ReAct loop with tool-calling.
-"""
-
 import json
 from typing import AsyncIterator, List, Optional, Any
 
@@ -18,8 +12,6 @@ from app.database import SessionLocal
 
 
 def _load_system_prompt() -> str:
-    """Load the active system prompt from DB. Falls back to the built-in
-    prompt if no DB row exists."""
     db = SessionLocal()
     try:
         row = db.query(SystemPrompt).filter(
@@ -36,12 +28,7 @@ def _load_system_prompt() -> str:
 SYSTEM_PROMPT = _load_system_prompt()
 
 
-# ============================================================
-# Helper: look up DB connection display name
-# ============================================================
-
 def _lookup_connection_name(conn_id: int) -> str:
-    """Look up a database connection's display name for tool labels."""
     if not conn_id:
         return ""
     db = SessionLocal()
@@ -51,10 +38,6 @@ def _lookup_connection_name(conn_id: int) -> str:
     finally:
         db.close()
 
-
-# ============================================================
-# OpenAI Client (async)
-# ============================================================
 
 _client: Optional[AsyncOpenAI] = None
 
@@ -69,14 +52,26 @@ def _get_client() -> AsyncOpenAI:
     return _client
 
 
-# ============================================================
-# Tool execution helpers
-# ============================================================
+async def _build_messages(question: str, history: List[dict] | None = None,
+                         user_id: str = "default") -> list[ChatCompletionMessageParam]:
+    experience_context = ""
+    try:
+        from app.services.experience_service import search_relevant
+        relevant = await search_relevant(question, user_id=user_id)
+        if relevant:
+            parts = ["\n\n## 历史相关经验（来自过往对话）\n"]
+            for i, r in enumerate(relevant, 1):
+                text = r.get("text", "")
+                if text:
+                    parts.append(f"- {text[:300]}")
+            experience_context = "\n".join(parts)
+    except Exception as e:
+        print(f"[Agent] Experience retrieval skipped: {e}")
 
-def _build_messages(question: str, history: List[dict] | None = None) -> list[ChatCompletionMessageParam]:
-    """Build message list from history + current question."""
+    system_content = SYSTEM_PROMPT + experience_context
+
     messages: list[ChatCompletionMessageParam] = [
-        {"role": "system", "content": SYSTEM_PROMPT}
+        {"role": "system", "content": system_content}
     ]
     if history:
         for msg in history:
@@ -97,10 +92,6 @@ async def _run_react_loop(
     db_scope: list[int] | None = None,
     default_category: str = "",
 ) -> tuple[str, list[str]]:
-    """Run a manual ReAct loop using OpenAI tool-calling.
-
-    Returns (final_answer_text, data_sources_used).
-    """
     client = _get_client()
     model = model or settings.model_name
     data_sources: set[str] = set()
@@ -124,7 +115,6 @@ async def _run_react_loop(
         )
         msg = response.choices[0].message
 
-        # No tool calls — we're done
         if not msg.tool_calls:
             return msg.content or "", list(data_sources)
 
@@ -146,7 +136,6 @@ async def _run_react_loop(
                 default_category=default_category, **args,
             )
 
-            # Append assistant message with tool call
             assistant_msg: dict = {
                 "role": "assistant",
                 "content": msg.content or "",
@@ -164,7 +153,6 @@ async def _run_react_loop(
                 "content": result,
             })
 
-    # Max rounds exhausted — get final response
     final = await client.chat.completions.create(
         model=model,
         messages=messages,
@@ -172,10 +160,6 @@ async def _run_react_loop(
     )
     return final.choices[0].message.content or "", list(data_sources)
 
-
-# ============================================================
-# Sync API — for non-streaming requests
-# ============================================================
 
 async def run_agent_sync(
     question: str,
@@ -185,11 +169,10 @@ async def run_agent_sync(
     db_scope: list[int] | None = None,
     default_category: str = "",
 ) -> dict:
-    """Run the agent synchronously and return structured result."""
     import asyncio
 
     async def _run():
-        messages = _build_messages(question, history)
+        messages = await _build_messages(question, history, user_id=user_id)
         answer, data_sources_used = await _run_react_loop(
             messages, user_id=user_id, kb_scope=kb_scope, db_scope=db_scope,
             default_category=default_category,
@@ -202,12 +185,7 @@ async def run_agent_sync(
     return asyncio.run(_run())
 
 
-# ============================================================
-# Streaming API — SSE events for frontend
-# ============================================================
-
 def format_sse_event(event_type: str, data: Any) -> str:
-    """Format a server-sent event."""
     return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
@@ -219,22 +197,15 @@ async def run_agent_stream_simple(
     db_scope: list[int] | None = None,
     default_category: str = "",
 ) -> AsyncIterator[str]:
-    """Run the agent with SSE streaming output.
+    import time as _time
+    msg_id = f"msg-{int(_time.time() * 1000)}-ai"
 
-    Yields SSE events:
-      - token           -> text token from LLM
-      - tool_call_start -> tool name + label for frontend display
-      - tool_call_end   -> tool name + result preview
-      - data_source     -> which data sources were queried (RAG / DB)
-      - final_answer    -> complete AI response text
-      - error           -> error details
-    """
-    yield format_sse_event("connected", {"status": "started"})
+    yield format_sse_event("connected", {"status": "started", "message_id": msg_id})
 
     try:
         client = _get_client()
         model = settings.model_name
-        messages = _build_messages(question, history)
+        messages = await _build_messages(question, history, user_id=user_id)
         tool_schemas = get_schemas()
         data_sources_detected: list[str] = []
         final_answer = ""
@@ -298,7 +269,6 @@ async def run_agent_stream_simple(
                 elif func_name in ("query_db", "list_db_tables"):
                     data_sources_detected.append("查询数据库")
 
-                # Build context-aware tool label for frontend display
                 if func_name == "query_rag":
                     kb_label = {
                         "personal": "检索个人知识库",
@@ -379,11 +349,11 @@ async def run_agent_stream_simple(
             )
 
         if final_answer:
-            yield format_sse_event("final_answer", {"text": final_answer})
+            yield format_sse_event("final_answer", {"text": final_answer, "message_id": msg_id})
         else:
             yield format_sse_event(
                 "final_answer",
-                {"text": "(Agent produced no text response)"},
+                {"text": "(Agent produced no text response)", "message_id": msg_id},
             )
 
     except Exception as e:

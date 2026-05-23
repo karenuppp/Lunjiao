@@ -36,6 +36,7 @@ Thumbs.db
 
 # Uploads & RAG storage (runtime data, not source code)
 uploads/
+opinions/
 **/*.meta
 
 # Logs

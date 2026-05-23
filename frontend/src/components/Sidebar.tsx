@@ -1,5 +1,4 @@
 import { Tooltip } from 'antd'
-// Lucide icons — replaces all emoji structural icons in sidebar
 import { Plus, X } from 'lucide-react'
 
 interface SidebarConv {
@@ -24,16 +23,13 @@ export default function Sidebar({
 }: SidebarProps) {
   return (
     <div className="sidebar-container">
-      {}
       <button onClick={onNewConversation} className="new-chat-btn" title="新建对话">
         <Plus size={16} strokeWidth={2.5} />
         {!collapsed && <span>新对话</span>}
       </button>
 
-      {/* Divider */}
       <div className="sidebar-divider" />
 
-      {}
       <div className="conv-list">
         {conversations.map((conv) => (
           <div

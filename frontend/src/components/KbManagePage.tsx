@@ -10,17 +10,12 @@ import { useToast } from './Toast'
 import { listUploadedFiles, deleteUploadedFile, updateFileCategory, listPromptTemplates } from '../api/chat'
 import type { UploadedFileMeta, PromptTemplate } from '../api/chat'
 
-// Lucide icons
 import {
   UploadCloud, FileText, FileType, Table2,
   Presentation, Archive, Image as ImageIcon, Loader2, Search, RefreshCw,
   Trash2, XCircle, CheckCircle2, Inbox,
   Check,
 } from 'lucide-react'
-
-// ============================================================
-// Helper functions
-// ============================================================
 
 function formatSize(bytes: number): string {
   if (!bytes || bytes < 0) return '—'
@@ -42,7 +37,6 @@ function formatTime(iso: string): string {
   }
 }
 
-/** File type → { lucideIcon, label, colorClass } */
 function getFileTypeMeta(filename: string) {
   const ext = filename.split('.').pop()?.toLowerCase() ?? ''
   switch (ext) {
@@ -71,10 +65,6 @@ const RAG_STATUS_MAP: Record<string, { color: string; label: string }> = {
   pending: { color: 'orange', label: '索引中' },
   failed:  { color: 'red', label: '索引失败' },
 }
-
-// ============================================================
-// UploadModal content — drag-drop + pending list + progress
-// ============================================================
 
 function UploadModalBody({ onDone }: { onDone: () => void }) {
   const {
@@ -109,7 +99,6 @@ function UploadModalBody({ onDone }: { onDone: () => void }) {
     setTimeout(() => onDone(), 600)
   }
 
-  // Detect archive extraction when upload progress updates
   useEffect(() => {
     if (!isUploading && uploadProgress.length > 0) {
       const hasArchive = uploadProgress.some(p => p.archiveChildren && p.archiveChildren.length > 0)
@@ -186,7 +175,6 @@ function UploadModalBody({ onDone }: { onDone: () => void }) {
                         </div>
                       )}
                     </div>
-                    {/* Archive children */}
                     {item.archiveChildren && item.archiveChildren.length > 0 && (
                       <div className="kb-archive-children">
                         {item.archiveChildren.map((child, ci) => (
@@ -263,10 +251,6 @@ function UploadModalBody({ onDone }: { onDone: () => void }) {
 }
 
 
-// ============================================================
-// Main component
-// ============================================================
-
 export default function KbManagePage() {
   const toast = useToast()
   const role = localStorage.getItem('lunjiao_role') || ''
@@ -284,14 +268,12 @@ export default function KbManagePage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
 
-  // ── Tag / category state ──
   const [templates, setTemplates] = useState<PromptTemplate[]>([])
-  const [pendingTags, setPendingTags] = useState<Record<string, string>>({})   // file_id → selected category
-  const [savingTags, setSavingTags] = useState<Record<string, boolean>>({})    // file_id → saving spinner
+  const [pendingTags, setPendingTags] = useState<Record<string, string>>({})
+  const [savingTags, setSavingTags] = useState<Record<string, boolean>>({})
 
   const searchInputRef = useRef<InputRef>(null)
 
-  // Load prompt templates for tag options
   useEffect(() => {
     let cancelled = false
     listPromptTemplates().then(data => { if (!cancelled) setTemplates(data) }).catch(() => {})
@@ -304,7 +286,6 @@ export default function KbManagePage() {
     setSavingTags(prev => ({ ...prev, [fileId]: true }))
     try {
       await updateFileCategory(fileId, category)
-      // Update local file list
       setFiles(prev => prev.map(f => f.file_id === fileId ? { ...f, category } : f))
       setPendingTags(prev => { const n = { ...prev }; delete n[fileId]; return n })
       toast.success('标签添加成功')
@@ -320,14 +301,14 @@ export default function KbManagePage() {
     return <div className={`file-icon file-icon-sm ${meta.colorClass}`}>{meta.icon}</div>
   }
 
-  const loadFiles = useCallback(async () => {
+  const loadFiles = useCallback(async (silent: boolean = false) => {
     setLoading(true)
     setError(null)
     try {
       const all = await listUploadedFiles({ user_id: userId })
       setFiles(all)
       setSelectedRowKeys([])
-      toast.success('刷新成功')
+      if (!silent) toast.success('刷新成功')
     } catch {
       setError('加载文件列表失败')
       toast.error('加载文件列表失败')
@@ -336,7 +317,13 @@ export default function KbManagePage() {
     }
   }, [userId, toast])
 
-  React.useEffect(() => { loadFiles() }, [loadFiles])
+  const initialLoadDone = useRef(false)
+  useEffect(() => {
+    if (!initialLoadDone.current) {
+      initialLoadDone.current = true
+      loadFiles(true)
+    }
+  }, [loadFiles])
 
   const scopedFiles = (() => {
     let filtered = files
@@ -382,7 +369,6 @@ export default function KbManagePage() {
             setFiles(prev => prev.filter(f => f.file_id !== fileId))
             successCount++
           } catch {
-            // continue
           }
         }
         setSelectedRowKeys([])
@@ -391,7 +377,6 @@ export default function KbManagePage() {
     })
   }
 
-  // Tag column — only visible when viewing public knowledge base
   const tagColumn = {
     title: '标签',
     dataIndex: 'category',

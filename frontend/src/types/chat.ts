@@ -1,11 +1,3 @@
-/**
- * TypeScript type definitions for Lunjiao department Q&A system.
- */
-
-// ============================================================
-// Conversation & Message Types
-// ============================================================
-
 export interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -14,6 +6,8 @@ export interface Message {
   chart_config?: Record<string, unknown>
   report_text?: string
   created_at?: string
+  message_id?: string
+  feedback_rating?: 'up' | 'down'
 }
 
 export interface Conversation {
@@ -25,10 +19,6 @@ export interface Conversation {
   messages?: Message[]
 }
 
-// ============================================================
-// Chat Request / Response Types
-// ============================================================
-
 export interface ChatRequest {
   message: string
   conversation_id?: string | null
@@ -37,7 +27,7 @@ export interface ChatRequest {
   response_mode?: 'text' | 'chart' | 'all'
   history?: Array<{ role: string; content: string }>
   user_id?: string
-  category?: string  // prompt template title — used as default RAG category
+  category?: string
 }
 
 export interface ChatResponse {
@@ -47,10 +37,6 @@ export interface ChatResponse {
   chart_config?: Record<string, unknown>
   report_text?: string
 }
-
-// ============================================================
-// SSE Event Types
-// ============================================================
 
 export type SSEEventType =
   | 'connected'
@@ -73,10 +59,6 @@ export interface SSEResponseEvent {
   [key: string]: unknown
 }
 
-// ============================================================
-// Data Source Types
-// ============================================================
-
 export type DataSourceType = 'database' | 'upload'
 export type DataSourceStatus = 'connected' | 'disconnected'
 
@@ -89,11 +71,6 @@ export interface DataSource {
   created_at?: string
 }
 
-// ============================================================
-// UI State Types
-// ============================================================
-
-/** User info from login */
 export interface UserInfo {
   user_id: string
   role: 'admin' | 'user'
@@ -118,26 +95,18 @@ export interface ChatState {
   selectedCategory: DataCategory[]
 }
 
-// ============================================================
-// File Upload / Knowledge Base Types
-// ============================================================
-
-/** App view mode */
 export type AppView = 'chat' | 'kb'
 
-/** KbManagePage tab */
 export type KbTab = 'upload' | 'files'
 
-/** A file selected by user but not yet uploaded */
 export interface PendingFile {
   uid: string
   file: File
   name: string
   size: number
-  isArchive: boolean      // whether it's a compressed archive (.zip/.rar/.7z/.tar.gz)
+  isArchive: boolean
 }
 
-/** Status of an upload-in-progress entry */
 export type FileUploadStatus = 'waiting' | 'uploading' | 'unpacking' | 'indexing' | 'done' | 'error'
 
 export interface UploadProgressItem {
@@ -145,13 +114,8 @@ export interface UploadProgressItem {
   name: string
   status: FileUploadStatus
   error?: string
-  /** For archives: children files extracted */
   archiveChildren?: { name: string; status: FileUploadStatus; error?: string }[]
 }
-
-// ============================================================
-// Chart Types (for ECharts rendering)
-// ============================================================
 
 export interface ChartSeries {
   name: string

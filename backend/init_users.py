@@ -1,13 +1,3 @@
-"""
-初始化用户表 — 建表 + 插入测试账号
-
-用法:
-  cd backend && source venv/bin/activate && python init_users.py
-
-可传入 --account 和 --password 覆盖默认值:
-  python init_users.py --account admin --password admin123
-"""
-
 import os
 import sys
 import argparse

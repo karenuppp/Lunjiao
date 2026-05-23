@@ -1,16 +1,3 @@
-"""
-Local RAG Engine — wraps RAGAnything (raganything) for document indexing and retrieval.
-
-RAGAnything is an all-in-one document processing + vector search engine.
-It handles parsing (PDF, DOCX, Excel, etc.), chunking, embedding, and semantic search.
-
-Usage:
-    from app.rag_engine import rag
-    await rag.init()
-    doc_id = await rag.index_file(file_path, file_name="doc.pdf")
-    results = await rag.search("your question")
-"""
-
 import os
 import asyncio
 import uuid
@@ -20,15 +7,7 @@ from typing import Optional
 from app.config import settings
 
 
-# ============================================================
-# LightRAG-compatible model functions for RAGAnything
-# ============================================================
-
 def _create_llm_model_func():
-    """Create a LightRAG-compatible LLM model function using OpenAI SDK.
-
-    LightRAG expects: async def llm_model_func(prompt, system_prompt=None, **kwargs) -> str
-    """
     from openai import OpenAI as SyncOpenAI
 
     client = SyncOpenAI(
@@ -37,7 +16,6 @@ def _create_llm_model_func():
     )
 
     async def llm_func(prompt: str, system_prompt: str | None = None, **kwargs) -> str:
-        """LightRAG-compatible LLM call: prompt -> text response."""
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
@@ -56,12 +34,6 @@ def _create_llm_model_func():
 
 
 def _create_embedding_func():
-    """Create a LightRAG-compatible embedding function.
-
-    LightRAG expects: EmbeddingFunc instance (dataclass with .func and __call__).
-    The __call__ must return a numpy array with total_elements % embedding_dim == 0.
-    nomic-embed-text-v1.5 outputs 768-dim embeddings.
-    """
     import numpy as np
     import httpx
     from lightrag.utils import wrap_embedding_func_with_attrs
@@ -72,10 +44,6 @@ def _create_embedding_func():
 
     @wrap_embedding_func_with_attrs(embedding_dim=embedding_dim_val, max_token_size=8192)
     async def emb_func(texts: list[str]) -> np.ndarray:
-        """LightRAG-compatible embedding call.
-
-        Returns: numpy array of shape (len(texts), embedding_dim)
-        """
         if isinstance(texts, str):
             texts = [texts]
         data = {"model": embedding_model_val, "input": texts}
@@ -93,27 +61,12 @@ def _create_embedding_func():
     return emb_func
 
 
-# ============================================================
-# RAG Engine Adapter
-# ============================================================
-
 class RAGEngineAdapter:
-    """Adapter wrapping RAGAnything for the Lunjiao project.
-
-    Each user gets an isolated RAG instance with independent workspace and vector storage.
-    Provides a simple async interface for indexing files, searching, and stats.
-    """
 
     def __init__(self):
-        """Initialize with an empty user→RAG instance map."""
         self._rags: dict[str, object] = {}
 
     async def _init_user_rag(self, user_id: str):
-        """Lazily create a per-user RAG instance with isolated storage.
-
-        Each user gets their own working_dir and LightRAG workspace, ensuring
-        complete data isolation at the vector/knowledge-graph level.
-        """
         if user_id in self._rags:
             return
 
@@ -143,8 +96,7 @@ class RAGEngineAdapter:
             llm_model_func=_create_llm_model_func(),
             embedding_func=_create_embedding_func(),
             lightrag_kwargs={
-                "workspace": user_id,  # LightRAG data isolation key
-                # ── 性能优化: 降低并发、限制 token 数、收紧阈值 ──
+                "workspace": user_id,
                 "embedding_func_max_async": settings.embedding_workers,
                 "embedding_batch_num": 16,
                 "chunk_top_k": settings.rag_chunk_top_k,
@@ -155,29 +107,17 @@ class RAGEngineAdapter:
             },
         )
 
-        # Initialize the underlying LightRAG engine
         await rag._ensure_lightrag_initialized()
         self._rags[user_id] = rag
 
     async def _ensure_ready(self, user_id: str):
-        """Ensure the per-user RAG instance is initialized before use."""
         if user_id not in self._rags:
             await self._init_user_rag(user_id)
 
-    # ---- File Indexing ----
-
     async def index_file(
         self, file_path: str, file_name: str | None = None,
-        category: str = "上传文件", user_id: str = "default"
+        category: str = "", user_id: str = "default"
     ) -> str:
-        """Index a file into the RAG knowledge base for a specific user.
-
-        For plain text files (txt, md), inserts directly into LightRAG
-        to bypass the slow MinerU PDF pipeline. For all other formats,
-        uses RAGAnything's process_document_complete.
-
-        Returns the doc_id string on success, or empty string on failure.
-        """
         await self._ensure_ready(user_id)
         user_rag = self._rags[user_id]
 
@@ -185,8 +125,8 @@ class RAGEngineAdapter:
         doc_id = hashlib.md5(str(file_path).encode()).hexdigest()[:16]
         ext = Path(file_path).suffix.lower()
 
-        # For plain text & Excel files, extract text content and insert directly into LightRAG
-        # (skips LibreOffice+PDF+MinerU pipeline entirely)
+        # Bypass the slow MinerU PDF pipeline for text/Excel: extract content and
+        # insert directly into LightRAG.
         text_content = None
         if ext in (".txt", ".md", ".csv"):
             try:
@@ -225,7 +165,6 @@ class RAGEngineAdapter:
                 return ""
 
         if text_content is not None:
-            # Direct chunk upsert into LightRAG (skips LLM entity extraction entirely)
             try:
                 lightrag = user_rag.lightrag
             except AttributeError as e:
@@ -245,12 +184,10 @@ class RAGEngineAdapter:
             doc_key = hashlib.md5(text_content.encode()).hexdigest()[:16]
 
             try:
-                # Insert full document
                 await lightrag.full_docs.upsert(
                     {doc_key: {"content": text_content, "file_path": ""}}
                 )
 
-                # Build and insert chunk data (no entity extraction)
                 inserting_chunks = {}
                 for idx, chunk_text in enumerate(text_chunks):
                     chunk_key = hashlib.md5(chunk_text.encode()).hexdigest()[:16]
@@ -267,7 +204,6 @@ class RAGEngineAdapter:
                 await lightrag._insert_done()
             except Exception as e:
                 print(f"[RAG-Anything] LightRAG upsert error for {file_name or Path(file_path).name}: {e}")
-                # Re-raise so caller can capture the error message
                 raise RuntimeError(f"向量索引写入失败: {e}") from e
 
             print(
@@ -275,7 +211,6 @@ class RAGEngineAdapter:
                 f"({len(text_content)} chars) via LightRAG"
             )
         else:
-            # For complex formats (PDF, DOCX, etc.), use RAGAnything's pipeline
             try:
                 await user_rag.process_document_complete(
                     file_path=file_path,
@@ -290,26 +225,14 @@ class RAGEngineAdapter:
         _doc_id_map[f"{user_id}:{file_name or Path(file_path).name}"] = f"{category}::{doc_id}"
         return doc_id
 
-    # ---- Search ----
-
     async def search(
         self, query_text: str, category: str | None = None, top_k: int = 3,
         user_id: str = "default"
     ) -> list[dict]:
-        """Search indexed documents by semantic similarity for a specific user.
-
-        Uses LightRAG's naive mode (vector-only, no KG entity extraction) for
-        speed. Returns raw text chunks as dicts for the agent to consume.
-        """
         await self._ensure_ready(user_id)
         lightrag = self._rags[user_id].lightrag
 
         try:
-            # Build a QueryParam with speed-optimized defaults:
-            #   mode="naive" — vector-only, skips KG entity/relation extraction
-            #   only_need_context=True — returns raw chunks, skips LLM call
-            #   top_k=top_k — limit results
-            #   chunk_top_k=top_k — consistent
             from lightrag.base import QueryParam
 
             param = QueryParam(
@@ -327,13 +250,11 @@ class RAGEngineAdapter:
         if not result_text or not result_text.strip():
             return []
 
-        # Post-process: extract actual content from LightRAG's naive mode output
         import json
         import re
 
         content_parts = []
 
-        # Try to extract JSON blocks between ``` markers (possibly multi-line)
         for block in re.findall(r"```(?:json)?\s*({.*?})\s*```", result_text, re.DOTALL):
             try:
                 obj = json.loads(block)
@@ -342,11 +263,9 @@ class RAGEngineAdapter:
                     content_parts.append(content)
             except json.JSONDecodeError:
                 pass
-        # If no JSON parsed, fall back to the raw text
         if not content_parts:
             content_parts.append(result_text.strip())
 
-        # Build structured results
         seen = set()
         results = []
         for text in content_parts:
@@ -369,19 +288,13 @@ class RAGEngineAdapter:
         self, query_text: str, category: str | None = None, top_k: int = 5,
         user_id: str = "default"
     ) -> list[dict]:
-        """Fallback keyword search (passthrough to same engine)."""
         return await self.search(query_text, category=category, top_k=top_k, user_id=user_id)
 
-    # ---- Stats ----
-
     async def stats(self, user_id: str = "default") -> dict:
-        """Get RAG index statistics for a specific user."""
         await self._ensure_ready(user_id)
         return self._rags[user_id].get_config_info() if user_id in self._rags else {}
 
     async def remove_file(self, doc_id: str, user_id: str = "default") -> bool:
-        """Remove a file from the RAG index. Not directly supported by RAGAnything,
-        but we track by doc_id for future use."""
         await self._ensure_ready(user_id)
         # RAGAnything doesn't expose a direct remove API through its public interface.
         # We log it for now.
@@ -389,8 +302,6 @@ class RAGEngineAdapter:
         return True
 
 
-# Singleton
 rag = RAGEngineAdapter()
 
-# In-memory doc_id mapping, keyed by (user_id, file_name) -> doc_id
 _doc_id_map: dict[str, str] = {}

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
-from app.api import chat, data_sources, history, upload, auth, db_connections, prompt
+from app.api import chat, data_sources, history, upload, auth, db_connections, prompt, experience, opinion
 from app.database import init_db
 from pathlib import Path
 
@@ -43,7 +43,6 @@ async def health():
     return {"status": "ok", "version": "0.1.0"}
 
 
-# Mount routers
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(data_sources.router, prefix="/api/data-sources", tags=["data-sources"])
 app.include_router(history.router, prefix="/api/history", tags=["history"])
@@ -52,6 +51,8 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(db_connections.router, prefix="/api/db-connections", tags=["db-connections"])
 app.include_router(prompt.router, prefix="/api/prompt", tags=["prompt"])
 app.include_router(prompt.templates_router, prefix="/api/prompts", tags=["prompts"])
+app.include_router(experience.router, prefix="/api/experiences", tags=["experiences"])
+app.include_router(opinion.router, prefix="/api", tags=["opinion"])
 
 # ── Production: serve built frontend when dist/ exists ──
 # Dev mode   → `npm run dev` (Vite on :5173 proxies /api to :8000)

@@ -336,7 +336,7 @@ export default function DbManagePage() {
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>数据库名</div>
               <Input
-                placeholder="例如：mydb（可选）"
+                placeholder="请输入数据库名称"
                 value={dbName}
                 onChange={(e) => setDbName(e.target.value)}
                 size="middle"
@@ -345,7 +345,7 @@ export default function DbManagePage() {
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 4 }}>表名</div>
               <Input
-                placeholder="例如：users"
+                placeholder="请输入数据表名称"
                 value={tableName}
                 onChange={(e) => setTableName(e.target.value)}
                 size="middle"

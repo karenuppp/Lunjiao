@@ -15,7 +15,6 @@ class DataSource(BaseModel):
     created_at: Optional[str] = None
 
 
-# Data source registry — replace with DB layer in production
 _source_registry = [
     DataSource(
         id="db-hr",

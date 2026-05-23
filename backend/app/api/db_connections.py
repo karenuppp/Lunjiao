@@ -1,6 +1,3 @@
-"""
-Database connection management API — CRUD for stored connections.
-"""
 from __future__ import annotations
 import json
 from typing import List
@@ -43,15 +40,11 @@ def _to_out(conn: DbConnection) -> DbConnectionOut:
     )
 
 
-# ── List connections ────────────────────────────────────
-
 @router.get("/", response_model=List[DbConnectionOut])
 def list_connections(db: Session = Depends(get_db)):
     conns = db.query(DbConnection).order_by(DbConnection.created_at.desc()).all()
     return [_to_out(c) for c in conns]
 
-
-# ── Create connection (no test) ─────────────────────────
 
 @router.post("/", response_model=DbConnectionOut)
 def create_connection(payload: DbConnectionCreate, db: Session = Depends(get_db)):
@@ -72,11 +65,8 @@ def create_connection(payload: DbConnectionCreate, db: Session = Depends(get_db)
     return _to_out(conn)
 
 
-# ── Test connection ─────────────────────────────────────
-
 @router.post("/test", response_model=TestResult)
 def test_connection(payload: DbConnectionTest):
-    """Test a connection without persisting it."""
     result = db_service.test_connection(
         host=payload.host,
         port=payload.port,
@@ -88,11 +78,8 @@ def test_connection(payload: DbConnectionTest):
     return TestResult(**result)
 
 
-# ── Test + save connection ──────────────────────────────
-
 @router.post("/{conn_id}/test", response_model=TestResult)
 def test_saved_connection(conn_id: int, db: Session = Depends(get_db)):
-    """Test an already-saved connection by ID. Updates cached fields on success."""
     conn = db.query(DbConnection).filter(DbConnection.id == conn_id).first()
     if not conn:
         raise HTTPException(status_code=404, detail="连接不存在")
@@ -116,8 +103,6 @@ def test_saved_connection(conn_id: int, db: Session = Depends(get_db)):
     return TestResult(**result)
 
 
-# ── Disconnect ──────────────────────────────────────────
-
 @router.post("/{conn_id}/disconnect")
 def disconnect_connection(conn_id: int, db: Session = Depends(get_db)):
     conn = db.query(DbConnection).filter(DbConnection.id == conn_id).first()
@@ -127,8 +112,6 @@ def disconnect_connection(conn_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {"message": "已断开"}
 
-
-# ── Connect (re-connect) ────────────────────────────────
 
 @router.post("/{conn_id}/connect")
 def connect_connection(conn_id: int, db: Session = Depends(get_db)):
@@ -153,8 +136,6 @@ def connect_connection(conn_id: int, db: Session = Depends(get_db)):
     else:
         return {"message": result["message"], "status": "disconnected"}
 
-
-# ── Delete ──────────────────────────────────────────────
 
 @router.delete("/{conn_id}")
 def delete_connection(conn_id: int, db: Session = Depends(get_db)):

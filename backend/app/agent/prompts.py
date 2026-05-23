@@ -1,16 +1,5 @@
-"""
-System prompts for the department Q&A agent.
-
-Supports multiple prompt templates: default (ReAct), tool-use focused, and report-focused.
-Prompts can be loaded/overridden via config.
-"""
-
 from typing import Optional
 
-
-# ============================================================
-# Default ReAct system prompt — rich context + clear rules
-# ============================================================
 
 DEFAULT_SYSTEM_PROMPT = """\
 You are a department intelligent Q&A assistant for Lunjiao. Your role is to help employees \
@@ -55,10 +44,6 @@ If data is unavailable, incomplete, or the question doesn't match any category:
 - Never make up numbers or fabricate data"""
 
 
-# ============================================================
-# Simplified prompt — for faster, lighter interactions
-# ============================================================
-
 SIMPLE_SYSTEM_PROMPT = """\
 You are a department Q&A assistant. Answer employee questions about company data \
 (personnel, equipment, finance) by using the available tools to query and analyze.\
@@ -70,10 +55,6 @@ Rules:
 - Provide actionable recommendations
 - Respond in the user's language"""
 
-
-# ============================================================
-# Report-focused prompt — for formal analysis requests
-# ============================================================
 
 REPORT_SYSTEM_PROMPT = """\
 You are a department Q&A assistant specializing in generating professional reports. \
@@ -87,10 +68,6 @@ When users request reports, analyses, or summaries:
 The generated report should be in Markdown format suitable for PDF export."""
 
 
-# ============================================================
-# Prompt loading utilities
-# ============================================================
-
 PROMPT_TEMPLATES = {
     "default": DEFAULT_SYSTEM_PROMPT,
     "simple": SIMPLE_SYSTEM_PROMPT,
@@ -99,7 +76,6 @@ PROMPT_TEMPLATES = {
 
 
 def get_system_prompt(template: str = "default") -> str:
-    """Get a system prompt by template name. Falls back to 'default' if unknown."""
     return PROMPT_TEMPLATES.get(template, DEFAULT_SYSTEM_PROMPT)
 
 
@@ -108,13 +84,6 @@ def build_dynamic_prompt(
     custom_rules: Optional[str] = None,
     base_template: str = "default",
 ) -> str:
-    """Build a dynamic system prompt with user context injected.
-
-    Args:
-        user_category: Current data category filter (e.g., '设备') to narrow agent focus.
-        custom_rules: Additional rules from the user or admin.
-        base_template: Template name to start from.
-    """
     template = get_system_prompt(base_template)
 
     if user_category:

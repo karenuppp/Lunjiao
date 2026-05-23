@@ -1,11 +1,8 @@
-"""Pydantic schemas for database connection API."""
 from __future__ import annotations
 from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime
 
-
-# ── Request schemas ──
 
 class DbConnectionCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=128, description="连接名称")
@@ -19,7 +16,6 @@ class DbConnectionCreate(BaseModel):
 
 
 class DbConnectionTest(BaseModel):
-    """Test a connection — same fields as create but doesn't persist."""
     name: str = Field(..., min_length=1, max_length=128)
     host: str = Field(..., min_length=1, max_length=255)
     port: int = Field(default=3306, ge=1, le=65535)
@@ -29,8 +25,6 @@ class DbConnectionTest(BaseModel):
     db_password: str = Field(..., min_length=1, max_length=255)
     environment: str = Field(default="test", pattern="^(test|production)$")
 
-
-# ── Response schemas ──
 
 class FieldInfo(BaseModel):
     name: str

@@ -1,6 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { UserInfo } from '../types/chat'
 import './Login.css'
+
+const BUBBLE_MESSAGES = [
+  '知微知彰，洞见成长。',
+  '交流使我进步！',
+]
 
 interface LoginPageProps {
   onLogin: (account: string, password: string) => Promise<UserInfo>
@@ -11,6 +16,27 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [bubbleText, setBubbleText] = useState('')
+
+  useEffect(() => {
+    const pickNext = (current: string) => {
+      const available = BUBBLE_MESSAGES.filter(m => m !== current)
+      return available[Math.floor(Math.random() * available.length)]
+    }
+
+    const showTimer = setTimeout(() => {
+      setBubbleText(pickNext(''))
+    }, 800)
+
+    const interval = setInterval(() => {
+      setBubbleText(prev => pickNext(prev))
+    }, 10000)
+
+    return () => {
+      clearTimeout(showTimer)
+      clearInterval(interval)
+    }
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -37,19 +63,20 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   return (
     <div className="login-page">
-      {/* Subtle background pattern layer */}
       <div className="login-bg-pattern" />
 
-      {/* Centered card */}
       <div className="login-card">
-        {/* Brand mark */}
         <div className="login-brand">
-          <span className="login-brand-icon">包</span>
-          <h1 className="login-brand-name">伦教包</h1>
-          <p className="login-brand-sub">伦教部门智能知识问答平台</p>
+          <div className="login-logo-wrap">
+            <img className="login-brand-logo" src="/logo-circle.png" alt="知微" />
+            {bubbleText && (
+              <div className="login-logo-bubble" key={bubbleText}>{bubbleText}</div>
+            )}
+          </div>
+          <h1 className="login-brand-name">知微</h1>
+          <p className="login-brand-sub">一款会成长的AI助理</p>
         </div>
 
-        {/* Form */}
         <form className="login-form" onSubmit={handleSubmit}>
           <div className="login-field">
             <label className="login-label" htmlFor="login-account">

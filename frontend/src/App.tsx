@@ -4,6 +4,8 @@ import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { Layout, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { ChatProvider, useChat } from './store/chatStore'
+import { TourProvider, useTour } from './store/tourStore'
+import TourBubble from './components/TourBubble'
 import { ToastProvider } from './components/Toast'
 import type { ReactNode } from 'react'
 import type { UserInfo } from './types/chat'
@@ -16,6 +18,7 @@ import KbManagePage from './components/KbManagePage'
 import DbManagePage from './components/DbManagePage'
 import UserManagePage from './components/UserManagePage'
 import PromptManagePage from './components/PromptManagePage'
+import ExpManagePage from './components/ExpManagePage'
 
 const { Sider, Content } = Layout
 
@@ -50,6 +53,7 @@ function ChatLayout() {
   const chat = useChat()
   const location = useLocation()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const { tourActive, currentStep, steps, currentStepConfig, nextStep, closeTour } = useTour()
 
   const isKb = location.pathname.startsWith('/knowledge-base')
 
@@ -87,7 +91,7 @@ function ChatLayout() {
         <AppHeader
           collapsed={sidebarCollapsed}
           onToggleSidebar={() => setSidebarCollapsed(!sidebarCollapsed)}
-          sessionTitle={isKb ? '知识库管理' : 'AI 智能问答'}
+          sessionTitle={isKb ? '知识库管理' : '智能问答'}
         />
         <Content style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           {isKb ? (
@@ -98,15 +102,28 @@ function ChatLayout() {
               isLoading={chat.isLoading ?? false}
               currentTool={chat.currentTool ?? null}
               onSendChat={(msg, _files, cat) => chat.sendChat(msg, cat)}
+              onFeedback={(msgId, rating) => chat.sendFeedback(msgId, rating)}
             />
           )}
         </Content>
       </Layout>
+
+      {tourActive && currentStepConfig && (
+        <TourBubble
+          step={currentStepConfig}
+          stepIndex={currentStep}
+          totalSteps={steps.length}
+          onNext={nextStep}
+          onClose={closeTour}
+        />
+      )}
     </Layout>
   )
 }
 
 function AdminLayout({ children, title }: { children: ReactNode; title: string }) {
+  const { tourActive, currentStep, steps, currentStepConfig, nextStep, closeTour } = useTour()
+
   return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', background: '#f5f5f5' }}>
       <AppHeader
@@ -117,17 +134,25 @@ function AdminLayout({ children, title }: { children: ReactNode; title: string }
       <Content style={{ flex: 1, overflow: 'hidden' }}>
         {children}
       </Content>
+
+      {tourActive && currentStepConfig && (
+        <TourBubble
+          step={currentStepConfig}
+          stepIndex={currentStep}
+          totalSteps={steps.length}
+          onNext={nextStep}
+          onClose={closeTour}
+        />
+      )}
     </div>
   )
 }
 
-export default function App() {
+function AppInner() {
+  const chat = useChat()
   return (
-    <BrowserRouter>
-      <ConfigProvider locale={zhCN} theme={{ token: { colorPrimary: '#4F46E5', borderRadius: 10 } }}>
-        <ToastProvider>
-        <ChatProvider>
-          <Routes>
+    <TourProvider role={chat.role || ''}>
+      <Routes>
             <Route path="/" element={<LoginPageWrapper />} />
 
             <Route
@@ -181,8 +206,30 @@ export default function App() {
               }
             />
 
+            <Route
+              path="/admin/experience"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <AdminLayout title="经验管理">
+                    <ExpManagePage />
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+    </TourProvider>
+  )
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <ConfigProvider locale={zhCN} theme={{ token: { colorPrimary: '#4F46E5', borderRadius: 10 } }}>
+        <ToastProvider>
+        <ChatProvider>
+          <AppInner />
         </ChatProvider>
         </ToastProvider>
       </ConfigProvider>

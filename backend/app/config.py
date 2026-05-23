@@ -6,12 +6,10 @@ load_dotenv()
 
 
 class Settings:
-    # ── LLM / Model — 本地 1234 端口的 qwen3.6-35B-A3B-apex ──
-    openai_api_key: str = os.getenv("OPENAI_API_KEY", "lm-studio")     # lm-studio 不校验 key
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "lm-studio")
     openai_base_url: str = os.getenv("OPENAI_BASE_URL", "http://localhost:1234/v1")
     model_name: str = os.getenv("MODEL_NAME", "qwen3.6-35B-A3B-apex")
 
-    # ── MySQL 连接 ──
     db_host: str = os.getenv("DB_HOST", "localhost")
     db_port: str = os.getenv("DB_PORT", "3306")
     db_user: str = os.getenv("DB_USER", "root")
@@ -22,24 +20,23 @@ class Settings:
     def database_url(self) -> str:
         return f"mysql+pymysql://{self.db_user}:{self.db_password}@{self.db_host}:{self.db_port}/{self.db_name}?charset=utf8mb4"
 
-    # ── RAG-Anything API ──
     rag_api_base: str = os.getenv("RAG_API_BASE", "http://localhost:8023")
-    rag_api_key: str = os.getenv("RAG_API_KEY", "ragflow-fe1010104b7e11efa01e0242ac1c0006")   # RAG-Anything 默认 key
+    rag_api_key: str = os.getenv("RAG_API_KEY", "ragflow-fe1010104b7e11efa01e0242ac1c0006")
 
-    # ── Embedding ──
     embedding_model: str = os.getenv("EMBEDDING_MODEL", "text-embedding-nomic-embed-text-v1.5")
     embedding_dim: int = int(os.getenv("EMBEDDING_DIM", "768"))
     embedding_workers: int = int(os.getenv("EMBEDDING_WORKERS", "2"))
 
-    # ── LightRAG 核心调优 ──
     rag_chunk_top_k: int = int(os.getenv("RAG_CHUNK_TOP_K", "5"))
     rag_cosine_threshold: float = float(os.getenv("RAG_COSINE_THRESHOLD", "0.3"))
     rag_max_context_tokens: int = int(os.getenv("RAG_MAX_CONTEXT_TOKENS", "1200"))
 
-    # ── MCP Server (database) ──
     mcp_server_base: str = os.getenv("MCP_SERVER_BASE", "http://localhost:8024")
 
-    # ── File upload ──
+    experience_top_k: int = int(os.getenv("EXPERIENCE_TOP_K", "3"))
+    experience_cosine_threshold: float = float(os.getenv("EXPERIENCE_COSINE_THRESHOLD", "0.5"))
+    experience_dedup_threshold: float = float(os.getenv("EXPERIENCE_DEDUP_THRESHOLD", "0.85"))
+
     upload_dir: str = os.getenv("UPLOAD_DIR", str(Path(__file__).parent.parent / "uploads"))
     max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "50"))
     allowed_extensions: list[str] = os.getenv(

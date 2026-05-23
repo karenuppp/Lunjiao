@@ -1,9 +1,3 @@
-/* ============================================================
-   Chat Panel Styles — Component-scoped overrides
-   Inherits design tokens from App.css :root
-   ============================================================ */
-
-/* ---------- Message rows ---------- */
 .message {
   margin-bottom: 20px;
   display: flex;
@@ -15,8 +9,6 @@
 
 .message.assistant { flex-direction: row; }
 
-
-/* ---------- Avatar circles ---------- */
 .message-avatar {
   width: 32px; height: 32px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -24,17 +16,15 @@
 }
 
 .message.user .message-avatar {
-  background: #4F46E5; /* Indigo 600 — from design tokens */
+  background: #4F46E5;
   color: #fff;
 }
 
 .message.assistant .message-avatar {
-  background: #EEF2FF; /* Indigo 50 — light accent */
+  background: #EEF2FF;
   color: #4F46E5;
 }
 
-
-/* ---------- Bubble container ---------- */
 .message-body {
   display: flex; flex-direction: column; max-width: 78%;
 }
@@ -42,21 +32,17 @@
 .message.user .message-body    { align-items: flex-end; }
 .message.assistant .message-body { align-items: flex-start; }
 
-
-/* ---------- User message bubble (right-aligned) ---------- */
 .message.user .message-bubble {
   display: inline-block;
-  background: #EEF2FF;   /* Indigo 50 light bg */
+  background: #EEF2FF;
   border-radius: 14px 6px 14px 14px;
   padding: 10px 16px;
   line-height: 1.6;
-  color: #0F172A;        /* Slate 900 — high contrast */
+  color: #0F172A;
 }
 
 .message.user .message-bubble p { margin: 0; white-space: pre-wrap; line-height: 1.6; }
 
-
-/* ---------- Assistant message (no bubble, pure text) ---------- */
 .message.assistant .message-bubble { padding: 2px 0; line-height: 1.75; color: #2C2D3A; }
 
 .message.assistant .message-bubble h1,
@@ -110,8 +96,6 @@
   border-left: 3px solid #E5E7EB; padding-left: 12px; margin: 8px 0; color: #6B7280;
 }
 
-
-/* ---------- Data source tags (above assistant answer content) ---------- */
 .data-source-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 
 .data-source-tag {
@@ -122,16 +106,12 @@
   font-weight: 500; line-height: 1.4;
 }
 
-
-/* ---------- Tool call indicator (thinking/processing) ---------- */
 .tool-call-indicator {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 12px; margin-bottom: 8px; border-radius: 6px;
   background: rgba(79, 70, 229, 0.05); color: #4F46E5; font-size: 13px;
 }
 
-
-/* ---------- Loading cursor (typing indicator) — replaces dot-bounce ---------- */
 .loading-cursor-area {
   display: inline-block; min-height: 1em; line-height: 1.7;
 }
@@ -146,8 +126,6 @@
   50% { opacity: 0; }
 }
 
-
-/* ---------- Empty state ---------- */
 .chat-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding-top: 24vh; text-align: center;
@@ -155,8 +133,6 @@
 
 .empty-icon { animation: fadeInUp 0.5s ease-out; }
 
-
-/* ---------- Input area drag-over state ---------- */
 .chat-input-area {
   padding: 16px 0; flex-shrink: 0;
   border-top: 2px solid transparent;
@@ -168,8 +144,6 @@
   background: rgba(79, 70, 229, 0.03);
 }
 
-
-/* ---------- Template selector row (above textarea) ---------- */
 .template-selector-row {
   display: flex; align-items: center; gap: 10px;
   margin-bottom: 10px; flex-wrap: wrap;
@@ -182,7 +156,7 @@
 .template-selector-row .ant-select-selector {
   border-radius: 8px !important;
   border-color: #E0E4EA !important;
-  background: #FAFBFC !important;
+  background: #FFFFFF !important;
   box-shadow: none !important;
 }
 
@@ -194,26 +168,6 @@
   font-size: 13px; color: #9CA3AF;
   display: inline-flex; align-items: center;
 }
-
-.template-chip {
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 2px 10px; border-radius: 8px;
-  background: var(--color-primary-light); border: 1px solid var(--color-primary-muted);
-  font-size: 12px; color: var(--color-primary); font-weight: 500;
-}
-
-.template-chip-name {
-  max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-
-.template-chip-remove {
-  display: inline-flex; align-items: center; justify-content: center;
-  background: none; border: none; color: var(--color-primary);
-  cursor: pointer; padding: 1px; border-radius: 3px; opacity: 0.6; transition: opacity 0.15s;
-}
-.template-chip-remove:hover { opacity: 1; }
-
-/* ---------- Context file chips (below textarea) ---------- */
 .context-files-bar {
   display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap;
 }
@@ -255,8 +209,6 @@
 }
 .cf-remove:hover { color: #EF4444; background: rgba(239,68,68,0.06); }
 
-
-/* ---------- Send button ---------- */
 .send-btn {
   padding: 6px 24px; border: none; border-radius: 6px;
   background: #D1D5DB; color: #FFF; font-size: 13px; font-weight: 500;
@@ -288,8 +240,6 @@
 .attach-btn:disabled {
   opacity: 0.4; cursor: not-allowed; pointer-events: none;
 }
-
-/* ---------- Suggestion chips (empty state) ---------- */
 .suggestion-chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
 
 .suggestion-chips button {
@@ -300,4 +250,56 @@
 .suggestion-chips button:hover {
   border-color: var(--color-primary);
   background: rgba(79, 70, 229, 0.04); color: var(--color-primary);
+}
+.feedback-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+  justify-content: flex-end;
+}
+
+.feedback-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #D1D5DB;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: #9CA3AF;
+  cursor: pointer;
+  transition: all var(--transition-fast) ease;
+  padding: 0;
+}
+
+.feedback-btn:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(79, 70, 229, 0.06);
+}
+
+.feedback-btn:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.feedback-btn.active-up {
+  border-color: #10B981;
+  color: #10B981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.feedback-btn.active-down {
+  border-color: #F59E0B;
+  color: #F59E0B;
+  background: rgba(245, 158, 11, 0.1);
+}
+
+.feedback-hint {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin-left: 4px;
+  font-style: italic;
 }

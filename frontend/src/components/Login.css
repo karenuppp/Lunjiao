@@ -1,14 +1,3 @@
-/* ============================================================
-   Login Page — "Refined Institutional Portal"
-   Coordinates with the existing Lunjiao design language:
-   - Navy sidebar (#1a1b2e) → full-page background
-   - Indigo primary (#4F46E5) → interactive accent
-   - Violet secondary (#7C3AED) → gradient CTA
-   - Light gray (#f7f8fa) → card surface
-   - Same font stack and border-radius tokens as App.css
-   ============================================================ */
-
-/* ── Page container ──────────────────────────────────────── */
 .login-page {
   position: relative;
   width: 100vw;
@@ -23,7 +12,6 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Background pattern — subtle geometric texture ───────── */
 .login-bg-pattern {
   position: absolute;
   inset: 0;
@@ -36,7 +24,6 @@
   background-size: 100% 100%, 40px 40px;
 }
 
-/* ── Card — centered white surface ───────────────────────── */
 .login-card {
   position: relative;
   z-index: 1;
@@ -63,26 +50,61 @@
   }
 }
 
-/* ── Brand section ───────────────────────────────────────── */
 .login-brand {
   text-align: center;
   margin-bottom: 40px;
 }
 
-.login-brand-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+.login-logo-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.login-brand-logo {
+  display: block;
   width: 56px;
   height: 56px;
+  margin: 0 auto;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.login-logo-bubble {
+  position: absolute;
+  top: -8px;
+  left: calc(100% + 4px);
+  white-space: nowrap;
+  padding: 6px 14px;
   border-radius: 14px;
-  background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
-  color: #ffffff;
-  font-size: 28px;
-  font-weight: 700;
-  letter-spacing: 0;
-  margin-bottom: 16px;
-  box-shadow: 0 4px 16px rgba(79,70,229,0.3);
+  background: #ffffff;
+  color: #4F46E5;
+  font-size: 12px;
+  font-weight: 500;
+  box-shadow: 0 2px 12px rgba(79,70,229,0.15), 0 1px 3px rgba(0,0,0,0.06);
+  animation: loginBubblePop 0.35s ease-out both;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.login-logo-bubble::before {
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right-color: #ffffff;
+}
+
+@keyframes loginBubblePop {
+  from {
+    opacity: 0;
+    transform: scale(0.5) translateX(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateX(0);
+  }
 }
 
 .login-brand-name {
@@ -99,7 +121,6 @@
   color: #9ca3af;
 }
 
-/* ── Form ────────────────────────────────────────────────── */
 .login-form {
   display: flex;
   flex-direction: column;
@@ -142,7 +163,6 @@
   box-shadow: 0 0 0 3px rgba(79,102,241,0.08);
 }
 
-/* ── Error message ───────────────────────────────────────── */
 .login-error {
   font-size: 13px;
   color: #ef4444;
@@ -160,7 +180,6 @@
   80% { transform: translateX(3px); }
 }
 
-/* ── Submit button ───────────────────────────────────────── */
 .login-btn {
   height: 44px;
   margin-top: 4px;
@@ -199,7 +218,6 @@
   background: #7C3AED;
 }
 
-/* ── Button spinner ──────────────────────────────────────── */
 .login-btn-spinner {
   display: inline-block;
   width: 18px;

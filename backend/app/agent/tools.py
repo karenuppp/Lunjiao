@@ -1,13 +1,3 @@
-"""
-Tools for the department Q&A Agent.
-Three core data retrieval tools:
-  - query_rag:          Search uploaded documents via local RAG engine
-  - query_db:           Query structured data via DatabaseService (read-only SQL)
-  - list_db_tables:     List available tables for a connection
-  - list_db_connections: List all connected databases
-
-All tools honour kb_scope / db_scope permissions set by admin in user management.
-"""
 from __future__ import annotations
 from typing import Any, Optional
 import json
@@ -19,22 +9,11 @@ from app.config import settings
 from app.rag_engine import rag
 from app.models.db_connection import DbConnection
 from app.services import db_service
+from app.services import experience_service
 
-
-# ============================================================
-# Tool 1: query_rag — Local RAG document search
-# ============================================================
 
 async def query_rag(query_text: str, category: str = "", top_k: int = 5,
                     user_id: str = "default", kb_scope: str = "personal") -> str:
-    """Search uploaded documents via the local RAG engine (user-isolated).
-
-    kb_scope controls which documents are visible:
-      - "public":  personal docs + public docs (admin-granted)
-      - "none":    personal docs only (default, admin didn't grant public)
-    Personal knowledge base is ALWAYS accessible — kb_scope only controls
-    whether public documents are added on top.
-    """
     include_public = (kb_scope == "public")
 
     category_param = category if category else None
@@ -78,30 +57,13 @@ async def query_rag(query_text: str, category: str = "", top_k: int = 5,
         return f"[RAG Engine Error] {str(e)}"
 
 
-# ============================================================
-# Tool 2: list_db_connections — Discover available databases
-# ============================================================
-
 def _check_db_access(connection_id: int, db_scope: list[int] | None) -> bool:
-    """Return True if connection_id is within the allowed db_scope."""
     if db_scope is None:
         return True
     return connection_id in db_scope
 
 
 async def list_db_connections(db_scope: list[int] | None = None) -> str:
-    """List all connected databases available for querying.
-
-    Returns each connection's ID, name, environment (test/production), table name,
-    and status. Use this FIRST before querying any database to discover which
-    connections are available.
-
-    db_scope filters which connections are visible:
-      - None:  all connections (no restriction)
-      - []:    access denied
-      - [1,2]: only connections with IDs 1 and 2
-    """
-    # --- Enforce db_scope ---
     if db_scope is not None and len(db_scope) == 0:
         return ("数据库查询已被管理员限制，您当前无权使用此功能。"
                 "请联系管理员开通权限。")
@@ -116,7 +78,6 @@ async def list_db_connections(db_scope: list[int] | None = None) -> str:
             return ("No connected databases found. "
                     "Ask the admin to add and connect databases in '数据库管理'.")
 
-        # Filter by db_scope if set
         visible = conns
         if db_scope is not None:
             visible = [c for c in conns if c.id in db_scope]
@@ -145,21 +106,8 @@ async def list_db_connections(db_scope: list[int] | None = None) -> str:
         db.close()
 
 
-# ============================================================
-# Tool 3: list_db_tables — List tables for a connection
-# ============================================================
-
 async def list_db_tables(connection_id: int,
                          db_scope: list[int] | None = None) -> str:
-    """List all tables available in a specific database connection.
-
-    Use this to discover table names and their fields before writing SQL queries.
-
-    Args:
-        connection_id: The database connection ID (from list_db_connections)
-        db_scope:      Allowed connection IDs (None = all allowed)
-    """
-    # --- Enforce db_scope ---
     if db_scope is not None and len(db_scope) == 0:
         return ("数据库查询已被管理员限制，您当前无权使用此功能。"
                 "请联系管理员开通权限。")
@@ -194,7 +142,6 @@ async def list_db_tables(connection_id: int,
         for t in tables:
             lines.append(f"- `{t['database']}`.`{t['table']}`")
 
-        # Also show cached fields for the configured table
         if conn.table_fields:
             try:
                 fields = json.loads(conn.table_fields)
@@ -210,20 +157,8 @@ async def list_db_tables(connection_id: int,
         db.close()
 
 
-# ============================================================
-# Tool 4: query_db — Execute read-only SQL
-# ============================================================
-
 async def query_db(sql_query: str, connection_id: int,
                    db_scope: list[int] | None = None) -> str:
-    """Execute a read-only SQL query on a specific database connection.
-
-    Args:
-        sql_query: A read-only SQL query to execute (SELECT, SHOW, DESCRIBE, EXPLAIN)
-        connection_id: The database connection ID (from list_db_connections)
-        db_scope: Allowed connection IDs (None = all allowed)
-    """
-    # --- Enforce db_scope ---
     if db_scope is not None and len(db_scope) == 0:
         return ("数据库查询已被管理员限制，您当前无权使用此功能。"
                 "请联系管理员开通权限。")
@@ -258,7 +193,6 @@ async def query_db(sql_query: str, connection_id: int,
         if not data:
             return "Query executed successfully but returned no rows."
 
-        # Format as markdown table
         header = "| " + " | ".join(columns) + " |\n"
         separator = "| " + " | ".join(["---"] * len(columns)) + " |\n"
         body_lines = []
@@ -284,18 +218,53 @@ async def query_db(sql_query: str, connection_id: int,
         db.close()
 
 
-# ============================================================
-# Tool registry
-# ============================================================
+async def query_experience(query_text: str, top_k: int = 3,
+                           user_id: str = "default") -> str:
+    results = await experience_service.search_relevant(
+        query_text=query_text, user_id=user_id, top_k=top_k
+    )
+
+    if not results:
+        return "No relevant historical experiences found."
+
+    lines = [f"**Historical Experiences ({len(results)} found):**\n"]
+    for i, r in enumerate(results, 1):
+        text = r.get("text", "")
+        lines.append(f"[{i}] {text[:500]}")
+    return "\n\n".join(lines)
+
 
 TOOL_FUNCTIONS: dict[str, callable] = {
     "query_rag": query_rag,
     "list_db_connections": list_db_connections,
     "list_db_tables": list_db_tables,
     "query_db": query_db,
+    "query_experience": query_experience,
 }
 
 TOOL_SCHEMAS: list[dict] = [
+    {
+        "type": "function",
+        "function": {
+            "name": "query_experience",
+            "description": "Search historical experiences and knowledge accumulated from past conversations. These experiences are high-quality, user-verified knowledge. Use this when you want to see if similar questions have been answered before.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query_text": {
+                        "type": "string",
+                        "description": "The question or topic to search for in historical experiences"
+                    },
+                    "top_k": {
+                        "type": "integer",
+                        "description": "Number of experiences to return",
+                        "default": 3
+                    }
+                },
+                "required": ["query_text"]
+            }
+        }
+    },
     {
         "type": "function",
         "function": {
@@ -404,6 +373,8 @@ async def execute_tool(name: str, user_id: str = "default",
             kwargs["kb_scope"] = kb_scope
             if not kwargs.get("category") and default_category:
                 kwargs["category"] = default_category
+        elif name == "query_experience":
+            kwargs["user_id"] = user_id
         elif name in ("list_db_connections", "list_db_tables", "query_db"):
             kwargs["db_scope"] = db_scope
         result = await func(**kwargs)

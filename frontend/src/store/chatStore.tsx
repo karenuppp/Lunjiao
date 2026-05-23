@@ -8,11 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { DataCategory, PendingFile, UploadProgressItem, AppView, UserInfo, Message as ChatMessage } from '../types/chat'
-import { sendChatStream, isArchiveFile, uploadFilesBatchWithUser, loginUser } from '../api/chat'
-
-// ============================================================
-// Persist conversations to localStorage
-// ============================================================
+import { sendChatStream, isArchiveFile, uploadFilesBatchWithUser, loginUser, sendFeedback } from '../api/chat'
 
 const STORAGE_KEY = 'lunjiao_conversations'
 
@@ -23,7 +19,7 @@ function saveToStorage(state: ChatState) {
       activeConversationId: state.activeConversationId,
       uploadedFiles: state.uploadedFiles,
     }))
-  } catch { /* quota exceeded or private browsing */ }
+  } catch { }
 }
 
 function loadFromStorage(): Partial<ChatState> {
@@ -40,10 +36,6 @@ function loadFromStorage(): Partial<ChatState> {
     return {}
   }
 }
-
-// ============================================================
-// State
-// ============================================================
 
 interface Conversation {
   id: string
@@ -62,7 +54,6 @@ interface ChatState {
   pendingFiles: PendingFile[]
   uploadProgress: UploadProgressItem[]
   isUploading: boolean
-  // Auth
   loggedIn: boolean
   userId: string
   role: string
@@ -91,7 +82,6 @@ const initialState: ChatState = {
   role: '',
 }
 
-// Merge persisted data into initial state
 const persisted = loadFromStorage()
 const mergedInitial: ChatState = {
   ...initialState,
@@ -99,10 +89,6 @@ const mergedInitial: ChatState = {
   activeConversationId: persisted.activeConversationId ?? initialState.activeConversationId,
   uploadedFiles: persisted.uploadedFiles ?? initialState.uploadedFiles,
 }
-
-// ============================================================
-// Actions
-// ============================================================
 
 type ChatAction =
   | { type: 'NEW_CONVERSATION'; payload: { id: string; title: string } }
@@ -126,6 +112,8 @@ type ChatAction =
   | { type: 'CLEAR_UPLOAD_PROGRESS' }
   | { type: 'LOGIN'; payload: { userId: string; role: string } }
   | { type: 'LOGOUT' }
+  | { type: 'SET_MESSAGE_FEEDBACK'; payload: { conversationId: string; messageId: string; rating: 'up' | 'down' } }
+  | { type: 'SET_MESSAGE_ID'; payload: { conversationId: string; tempId: string; serverMessageId: string } }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -273,14 +261,48 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     case 'LOGOUT':
       return { ...state, loggedIn: false, userId: '', role: '' }
 
+    case 'SET_MESSAGE_FEEDBACK': {
+      const { conversationId, messageId, rating } = action.payload
+      return {
+        ...state,
+        conversations: state.conversations.map((conv) =>
+          conv.id === conversationId
+            ? {
+                ...conv,
+                messages: conv.messages.map((m) =>
+                  m.id === messageId || (m as ChatMessage).message_id === messageId
+                    ? { ...m, feedback_rating: rating }
+                    : m,
+                ),
+              }
+            : conv,
+        ),
+      }
+    }
+
+    case 'SET_MESSAGE_ID': {
+      const { conversationId, tempId, serverMessageId } = action.payload
+      return {
+        ...state,
+        conversations: state.conversations.map((conv) =>
+          conv.id === conversationId
+            ? {
+                ...conv,
+                messages: conv.messages.map((m) =>
+                  m.id === tempId
+                    ? { ...m, message_id: serverMessageId }
+                    : m,
+                ),
+              }
+            : conv,
+        ),
+      }
+    }
+
     default:
       return state
   }
 }
-
-// ============================================================
-// Context
-// ============================================================
 
 interface ChatContextValue {
   state: ChatState
@@ -300,39 +322,32 @@ interface ChatContextValue {
   confirmUpload: () => Promise<void>
   login: (account: string, password: string) => Promise<UserInfo>
   logout: () => void
+  sendFeedback: (messageId: string, rating: 'up' | 'down') => void
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null)
-
-// ============================================================
-// Provider
-// ============================================================
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(chatReducer, mergedInitial)
   const abortRef = useRef<(() => void) | null>(null)
 
-  // Auto-persist to localStorage on every state change
   const persistedRef = useRef(state)
   persistedRef.current = state
   useEffect(() => {
     saveToStorage(persistedRef.current)
   })
 
-  // ---- New conversation ----
   const newConversation = useCallback(() => {
     if (abortRef.current) abortRef.current()
     const id = `conv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
-    // Auto-title the previous conversation: find the last conversation with content,
-    // extract its first user message (first 10 chars) as its title
+    // Auto-title the previous conversation with the first user message's first 10 chars
     const prevConvs = persistedRef.current.conversations ?? []
     for (let i = prevConvs.length - 1; i >= 0; i--) {
       const conv = prevConvs[i]
-      // Skip if this conversation already has a non-default title
       if (conv.title && conv.title !== '新对话') continue
 
-      // Find the first user message in this conversation
+
       const firstUserMsg = conv.messages.find((m) => m.role === 'user' && m.content)
       if (firstUserMsg) {
         const clean = firstUserMsg.content.replace(/[\n\r]+/g, ' ').trim()
@@ -347,28 +362,23 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'NEW_CONVERSATION', payload: { id, title: '新对话' } })
   }, [])
 
-  // ---- Switch conversation ----
   const switchConversation = useCallback((id: string | null) => {
     if (abortRef.current) abortRef.current()
     dispatch({ type: 'SWITCH_CONVERSATION', payload: { id } })
   }, [])
 
-  // ---- Remove conversation ----
   const removeConversation = useCallback((id: string) => {
     dispatch({ type: 'REMOVE_CONVERSATION', payload: id })
   }, [])
 
-  // ---- Set category ----
   const setCategory = useCallback((cat: DataCategory[]) => {
     dispatch({ type: 'SET_CATEGORY', payload: cat })
   }, [])
 
-  // ---- Send chat (streaming) ----
   const sendChat = useCallback(
     (message: string, category?: string) => {
       if (!message.trim() || state.isLoading) return
 
-      // Ensure there's an active conversation
       let convId = state.activeConversationId
       if (!convId) {
         convId = `conv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -378,7 +388,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         })
       }
 
-      // Add user message
       const userMsg: ChatMessage = {
         id: `msg-${Date.now()}-user`,
         role: 'user',
@@ -386,7 +395,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
       dispatch({ type: 'ADD_MESSAGE', payload: { conversationId: convId, message: userMsg } })
 
-      // Add placeholder for assistant response (updated as stream arrives)
       dispatch({
         type: 'ADD_MESSAGE',
         payload: {
@@ -397,15 +405,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       dispatch({ type: 'SET_LOADING', payload: true })
 
-      // Collect data sources from tool call events
       const dataSources: string[] = []
 
-      // Start streaming
       const controller = sendChatStream(
         {
           message,
           conversation_id: convId,
-          history: undefined, // backend handles history internally for now
+          history: undefined,
           user_id: localStorage.getItem('lunjiao_user_id') || 'default',
           category: category || undefined,
         },
@@ -439,6 +445,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
             case 'final_answer': {
               const text = (data.text as string) || ''
+              const serverMsgId = (data.message_id as string) || ''
               dispatch({
                 type: 'FINALIZE_STREAMING',
                 payload: {
@@ -447,6 +454,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                   dataSources: dataSources.length > 0 ? dataSources : undefined,
                 },
               })
+              if (serverMsgId) {
+                const conv = persistedRef.current.conversations.find(c => c.id === convId)
+                const lastMsg = conv?.messages[conv.messages.length - 1]
+                if (lastMsg && lastMsg.role === 'assistant') {
+                  dispatch({
+                    type: 'SET_MESSAGE_ID',
+                    payload: { conversationId: convId!, tempId: lastMsg.id, serverMessageId: serverMsgId },
+                  })
+                }
+              }
               break
             }
 
@@ -463,7 +480,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     [state.isLoading, state.activeConversationId]
   )
 
-  // ---- Upload file ----
   const uploadFile = useCallback(async (file: File, userId?: string): Promise<UploadedFileMeta | null> => {
     const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
     const currentUserId = userId || localStorage.getItem('lunjiao_user_id') || 'default'
@@ -497,7 +513,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // ---- Remove uploaded file ----
   const removeUploadedFile = useCallback(async (fileId: string, userId?: string) => {
     const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
     const currentUserId = userId || localStorage.getItem('lunjiao_user_id') || 'default'
@@ -507,12 +522,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'REMOVE_UPLOADED_FILE', payload: fileId })
   }, [])
 
-  // ---- Set app view ----
   const setView = useCallback((view: AppView) => {
     dispatch({ type: 'SET_VIEW', payload: view })
   }, [])
 
-  // ---- Add pending files ----
   const addPendingFiles = useCallback((files: FileList | File[]) => {
     const arr = Array.from(files)
     const pending: PendingFile[] = arr.map((f) => ({
@@ -525,29 +538,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'ADD_PENDING_FILES', payload: pending })
   }, [])
 
-  // ---- Remove one pending file ----
   const removePendingFile = useCallback((uid: string) => {
     dispatch({ type: 'REMOVE_PENDING_FILE', payload: uid })
   }, [])
 
-  // ---- Clear pending files ----
   const clearPendingFiles = useCallback(() => {
     dispatch({ type: 'CLEAR_PENDING_FILES' })
   }, [])
 
-  // ---- Clear upload progress ----
   const clearUploadProgress = useCallback(() => {
     dispatch({ type: 'CLEAR_UPLOAD_PROGRESS' })
   }, [])
 
-  // ---- Confirm upload (batch) ----
   const confirmUpload = useCallback(async () => {
     const pending = persistedRef.current.pendingFiles
     if (pending.length === 0) return
 
     const userId = localStorage.getItem('lunjiao_user_id') || 'default'
 
-    // Build initial progress items
     const progress = pending.map<UploadProgressItem>((pf) => ({
       uid: pf.uid,
       name: pf.name,
@@ -557,13 +565,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'SET_UPLOADING', payload: true })
     dispatch({ type: 'UPDATE_UPLOAD_PROGRESS', payload: progress })
 
-    // Submit all files
     const files = pending.map((pf) => pf.file)
 
     try {
       const result = await uploadFilesBatchWithUser(files, userId)
 
-      // Mark each file as done or error based on result
       const updated: UploadProgressItem[] = pending.map((pf) => {
         const match = result.files.find((f: any) => f.file_name === pf.name) as any
         if (match) {
@@ -594,7 +600,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       })
       dispatch({ type: 'UPDATE_UPLOAD_PROGRESS', payload: updated })
 
-      // Add successfully uploaded files to uploadedFiles
       for (const f of result.files) {
         dispatch({
           type: 'ADD_UPLOADED_FILE',
@@ -619,16 +624,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // ---- Logout ----
   const logout = useCallback(() => {
     localStorage.removeItem('lunjiao_user_id')
     localStorage.removeItem('lunjiao_role')
-    // Abort any in-flight streaming
     if (abortRef.current) abortRef.current()
     dispatch({ type: 'LOGOUT' })
   }, [])
 
-  // ---- Login ----
   const login = useCallback(async (account: string, password: string): Promise<UserInfo> => {
     const res = await loginUser(account, password)
     if (!res.ok) {
@@ -642,7 +644,25 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     return { user_id: userId, role: role as 'admin' | 'user' }
   }, [])
 
-  // ---- Computed values (accessed via hook) ----
+  const sendFeedbackAction = useCallback(
+    async (messageId: string, rating: 'up' | 'down') => {
+      const convId = persistedRef.current.activeConversationId
+      if (!convId) return
+
+      dispatch({
+        type: 'SET_MESSAGE_FEEDBACK',
+        payload: { conversationId: convId, messageId, rating },
+      })
+
+      try {
+        await sendFeedback(convId, messageId, rating)
+      } catch (err) {
+        console.error('Feedback failed:', err)
+      }
+    },
+    [],
+  )
+
   const value: ChatContextValue = {
     state,
     dispatch,
@@ -661,20 +681,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     confirmUpload,
     login,
     logout,
+    sendFeedback: sendFeedbackAction,
   }
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
 }
 
-// ============================================================
-// Hook
-// ============================================================
-
 export function useChat() {
   const ctx = useContext(ChatContext)
   if (!ctx) throw new Error('useChat must be used within ChatProvider')
   return {
-    // State
     messages: ctx.state.conversations.find((c) => c.id === ctx.state.activeConversationId)?.messages ?? [],
     conversations: ctx.state.conversations,
     isLoading: ctx.state.isLoading,
@@ -688,7 +704,6 @@ export function useChat() {
     isUploading: ctx.state.isUploading,
     loggedIn: ctx.state.loggedIn,
     role: ctx.state.role,
-    // Actions
     sendChat: ctx.sendChat,
     newConversation: ctx.newConversation,
     switchConversation: ctx.switchConversation,
@@ -704,5 +719,6 @@ export function useChat() {
     confirmUpload: ctx.confirmUpload,
     login: ctx.login,
     logout: ctx.logout,
+    sendFeedback: ctx.sendFeedback,
   }
 }

@@ -1,16 +1,7 @@
-/**
- * HTTP API client — wraps all fetch calls to backend endpoints.
- */
-
 import type { ChatRequest, ChatResponse, Conversation, DataSource } from '../types/chat'
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
 
-// ============================================================
-// Chat APIs
-// ============================================================
-
-/** Login — verify credentials against backend */
 export async function loginUser(account: string, password: string): Promise<{
   ok: boolean
   user_id?: string
@@ -26,7 +17,6 @@ export async function loginUser(account: string, password: string): Promise<{
   return res.json()
 }
 
-/** Send a non-streaming chat message */
 export async function sendChat(request: ChatRequest): Promise<ChatResponse> {
   const res = await fetch(`${BASE_URL}/chat/`, {
     method: 'POST',
@@ -37,7 +27,6 @@ export async function sendChat(request: ChatRequest): Promise<ChatResponse> {
   return res.json()
 }
 
-/** Send a streaming chat message — returns SSE reader */
 export function sendChatStream(
   request: ChatRequest,
   onMessage: (eventType: string, data: Record<string, unknown>) => void,
@@ -96,10 +85,6 @@ export function sendChatStream(
   return { abort: () => controller.abort() }
 }
 
-// ============================================================
-// Conversation / History APIs
-// ============================================================
-
 export async function listConversations(): Promise<Conversation[]> {
   const res = await fetch(`${BASE_URL}/history/`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -122,26 +107,17 @@ export async function deleteConversation(id: string): Promise<void> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
 }
 
-/** Load messages for a specific conversation */
 export async function loadMessages(conversationId: string): Promise<Record<string, unknown>> {
   const res = await fetch(`${BASE_URL}/history/${conversationId}/messages`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
 
-// ============================================================
-// Data Source APIs
-// ============================================================
-
 export async function listDataSources(): Promise<DataSource[]> {
   const res = await fetch(`${BASE_URL}/data-sources/`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
-
-// ============================================================
-// File Upload APIs
-// ============================================================
 
 export interface UploadedFileMeta {
   file_id: string
@@ -155,7 +131,6 @@ export interface UploadedFileMeta {
   category?: string
 }
 
-/** List files with optional scope filtering and keyword search. */
 export async function listUploadedFiles(opts?: {
   scope?: 'all' | 'public' | 'personal'
   user_id?: string
@@ -179,7 +154,6 @@ export async function deleteUploadedFile(fileId: string, userId?: string): Promi
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
 }
 
-/** Update the category tag of an uploaded file. */
 export async function updateFileCategory(fileId: string, category: string): Promise<void> {
   const formData = new FormData()
   formData.append('category', category)
@@ -189,10 +163,6 @@ export async function updateFileCategory(fileId: string, category: string): Prom
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
 }
-
-// ============================================================
-// Batch Upload — multiple files at once
-// ============================================================
 
 export interface BatchUploadResult {
   files: UploadedFileMeta[]
@@ -215,11 +185,10 @@ export async function uploadFilesBatch(files: File[]): Promise<BatchUploadResult
   return res.json()
 }
 
-/** Batch upload with user_id and category for personal knowledge base. */
 export async function uploadFilesBatchWithUser(
   files: File[],
   userId: string,
-  category: string = '上传文件',
+  category: string = '',
 ): Promise<BatchUploadResult> {
   const formData = new FormData()
   for (const file of files) {
@@ -236,15 +205,10 @@ export async function uploadFilesBatchWithUser(
   return res.json()
 }
 
-/** Check if filename is a compressed archive (handled by backend). */
 export function isArchiveFile(filename: string): boolean {
   const ext = filename.toLowerCase()
   return ext.endsWith('.zip') || ext.endsWith('.rar') || ext.endsWith('.7z') || ext.endsWith('.tar.gz') || ext.endsWith('.tgz')
 }
-
-// ============================================================
-// Database Connection APIs
-// ============================================================
 
 export interface DbFieldInfo {
   name: string
@@ -351,9 +315,9 @@ export interface UserRecord {
 export interface QueryPermission {
   kb_scope: string
   db_scope: number[] | null
+  exp_extract_enabled: boolean
 }
 
-/** List all users (admin only). Returns 403 if caller is not admin. */
 export async function listUsers(): Promise<UserRecord[]> {
   const userId = localStorage.getItem('lunjiao_user_id') || ''
   const res = await fetch(`${BASE_URL}/auth/users?user_id=${encodeURIComponent(userId)}`)
@@ -362,7 +326,6 @@ export async function listUsers(): Promise<UserRecord[]> {
   return res.json()
 }
 
-/** Create a new user (admin only). */
 export async function createUser(account: string, password: string, role: string): Promise<void> {
   const userId = localStorage.getItem('lunjiao_user_id') || ''
   const res = await fetch(`${BASE_URL}/auth/users?user_id=${encodeURIComponent(userId)}`, {
@@ -376,14 +339,12 @@ export async function createUser(account: string, password: string, role: string
   }
 }
 
-/** Delete a user by id (admin only). */
 export async function deleteUser(userId: number): Promise<void> {
   const callerId = localStorage.getItem('lunjiao_user_id') || ''
   const res = await fetch(`${BASE_URL}/auth/users/${userId}?caller_id=${encodeURIComponent(callerId)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
 }
 
-/** Change user password (admin only). */
 export async function changeUserPassword(userId: number, newPassword: string): Promise<void> {
   const callerId = localStorage.getItem('lunjiao_user_id') || ''
   const res = await fetch(`${BASE_URL}/auth/users/${userId}/change-password?caller_id=${encodeURIComponent(callerId)}`, {
@@ -397,7 +358,6 @@ export async function changeUserPassword(userId: number, newPassword: string): P
   }
 }
 
-/** Get user query permission (admin only). */
 export async function getUserQueryPermission(userId: number): Promise<QueryPermission> {
   const callerId = localStorage.getItem('lunjiao_user_id') || ''
   const res = await fetch(
@@ -407,24 +367,18 @@ export async function getUserQueryPermission(userId: number): Promise<QueryPermi
   return res.json()
 }
 
-// ============================================================
-// System Prompt APIs
-// ============================================================
-
 export interface PromptRecord {
   key: string
   content: string
   updated_at: string | null
 }
 
-/** Get current system prompt. */
 export async function getSystemPrompt(): Promise<PromptRecord> {
   const res = await fetch(`${BASE_URL}/prompt`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
 
-/** Update system prompt (admin only). */
 export async function updateSystemPrompt(content: string): Promise<{ ok: boolean; key: string; updated_at: string }> {
   const res = await fetch(`${BASE_URL}/prompt`, {
     method: 'PUT',
@@ -438,7 +392,6 @@ export async function updateSystemPrompt(content: string): Promise<{ ok: boolean
   return res.json()
 }
 
-/** Reset system prompt to built-in default. */
 export async function resetSystemPrompt(): Promise<{ ok: boolean; content: string; updated_at: string }> {
   const res = await fetch(`${BASE_URL}/prompt/reset`, {
     method: 'POST',
@@ -446,10 +399,6 @@ export async function resetSystemPrompt(): Promise<{ ok: boolean; content: strin
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
-
-// ============================================================
-// Prompt Template CRUD APIs
-// ============================================================
 
 export interface PromptTemplate {
   id: number
@@ -459,14 +408,12 @@ export interface PromptTemplate {
   updated_at: string | null
 }
 
-/** List all prompt templates. */
 export async function listPromptTemplates(): Promise<PromptTemplate[]> {
   const res = await fetch(`${BASE_URL}/prompts`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
 
-/** Create a new prompt template. */
 export async function createPromptTemplate(title: string, content: string): Promise<PromptTemplate> {
   const res = await fetch(`${BASE_URL}/prompts`, {
     method: 'POST',
@@ -480,7 +427,6 @@ export async function createPromptTemplate(title: string, content: string): Prom
   return res.json()
 }
 
-/** Update an existing prompt template. */
 export async function updatePromptTemplate(id: number, payload: { title?: string; content?: string }): Promise<PromptTemplate> {
   const res = await fetch(`${BASE_URL}/prompts/${id}`, {
     method: 'PUT',
@@ -494,7 +440,6 @@ export async function updatePromptTemplate(id: number, payload: { title?: string
   return res.json()
 }
 
-/** Delete a prompt template. */
 export async function deletePromptTemplate(id: number): Promise<void> {
   const res = await fetch(`${BASE_URL}/prompts/${id}`, { method: 'DELETE' })
   if (!res.ok) {
@@ -503,7 +448,84 @@ export async function deletePromptTemplate(id: number): Promise<void> {
   }
 }
 
-/** Set user query permission (admin only). */
+export async function sendFeedback(
+  conversationId: string,
+  messageId: string,
+  rating: 'up' | 'down',
+  userId?: string,
+): Promise<{ ok: boolean; rating: string }> {
+  const res = await fetch(`${BASE_URL}/chat/feedback`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      conversation_id: conversationId,
+      message_id: messageId,
+      rating,
+      user_id: userId || localStorage.getItem('lunjiao_user_id') || 'default',
+    }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export interface ExperienceRecord {
+  id: number
+  user_id: string
+  title: string
+  content: string
+  source_conv_id: string | null
+  source_msg_id: string | null
+  tags: string[]
+  confidence: number
+  status: string
+  access_count: number
+  last_accessed: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+export async function listExperiences(params?: {
+  page?: number
+  page_size?: number
+  user_id?: string
+  status?: string
+}): Promise<{ items: ExperienceRecord[]; total: number; page: number; page_size: number }> {
+  const searchParams = new URLSearchParams()
+  if (params?.page) searchParams.set('page', String(params.page))
+  if (params?.page_size) searchParams.set('page_size', String(params.page_size))
+  if (params?.user_id) searchParams.set('user_id', params.user_id)
+  if (params?.status) searchParams.set('status', params.status)
+
+  const res = await fetch(`${BASE_URL}/experiences?${searchParams.toString()}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function updateExperience(
+  id: number,
+  payload: { title?: string; content?: string; tags?: string[]; status?: string },
+): Promise<{ ok: boolean; experience: ExperienceRecord }> {
+  const res = await fetch(`${BASE_URL}/experiences/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function deleteExperience(id: number): Promise<{ ok: boolean }> {
+  const res = await fetch(`${BASE_URL}/experiences/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function getExperienceTags(): Promise<{ tags: string[] }> {
+  const res = await fetch(`${BASE_URL}/experiences/tags`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
 export async function setUserQueryPermission(
   userId: number,
   payload: QueryPermission,
@@ -514,11 +536,25 @@ export async function setUserQueryPermission(
     {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        kb_scope: payload.kb_scope,
+        db_scope: payload.db_scope,
+        exp_extract_enabled: payload.exp_extract_enabled,
+      }),
     },
   )
   if (!res.ok) {
     const data = await res.json().catch(() => ({}))
     throw new Error((data as any).detail || `HTTP ${res.status}`)
   }
+}
+
+export async function submitOpinion(content: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${BASE_URL}/opinion`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
 }

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Table, Input, Select, Modal, Button, Radio, Checkbox, Spin } from 'antd'
+import { Table, Input, Select, Modal, Button, Radio, Checkbox, Spin, Switch } from 'antd'
 import { PlusOutlined, DeleteOutlined, EditOutlined, SafetyOutlined } from '@ant-design/icons'
 import {
   listUsers,
@@ -14,7 +14,6 @@ import {
 import { useToast } from './Toast'
 import type { UserRecord, DbConnectionRecord } from '../api/chat'
 
-/* ── knowledge base scope labels ── */
 const KB_SCOPE_LABELS: Record<string, string> = {
   public: '公共知识库',
   personal: '个人知识库',
@@ -25,37 +24,32 @@ export default function UserManagePage() {
   const toast = useToast()
   const navigate = useNavigate()
 
-  /* ── user list ── */
   const [users, setUsers] = useState<UserRecord[]>([])
   const [loading, setLoading] = useState(false)
 
-  /* ── new-user form ── */
   const [newAccount, setNewAccount] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [newRole, setNewRole] = useState('user')
   const [submitting, setSubmitting] = useState(false)
 
-  /* ── change-password modal ── */
   const [cpModalOpen, setCpModalOpen] = useState(false)
   const [cpUserId, setCpUserId] = useState<number | null>(null)
   const [cpNewPassword, setCpNewPassword] = useState('')
   const [cpSubmitting, setCpSubmitting] = useState(false)
 
-  /* ── delete-user modal ── */
   const [delModalOpen, setDelModalOpen] = useState(false)
   const [delUserId, setDelUserId] = useState<number | null>(null)
   const [delSubmitting, setDelSubmitting] = useState(false)
 
-  /* ── query-permission modal ── */
   const [permModalOpen, setPermModalOpen] = useState(false)
   const [permUserId, setPermUserId] = useState<number | null>(null)
   const [permKbScope, setPermKbScope] = useState('personal')
   const [permDbScope, setPermDbScope] = useState<number[]>([])
+  const [permExtractEnabled, setPermExtractEnabled] = useState(false)
   const [permSubmitting, setPermSubmitting] = useState(false)
   const [dbConnections, setDbConnections] = useState<DbConnectionRecord[]>([])
   const [dbLoading, setDbLoading] = useState(false)
 
-  /* ── fetch users ── */
   const fetchUsers = useCallback(async () => {
     setLoading(true)
     try {
@@ -75,7 +69,6 @@ export default function UserManagePage() {
     fetchUsers()
   }, [fetchUsers])
 
-  /* ── create user ── */
   const handleCreateUser = async () => {
     if (!newAccount.trim()) {
       toast.error('请输入账号')
@@ -101,7 +94,6 @@ export default function UserManagePage() {
     }
   }
 
-  /* ── delete user ── */
   const openDeleteModal = (userId: number) => {
     setDelUserId(userId)
     setDelModalOpen(true)
@@ -122,7 +114,6 @@ export default function UserManagePage() {
     }
   }
 
-  /* ── change password ── */
   const openChangePwdModal = (userId: number) => {
     setCpUserId(userId)
     setCpNewPassword('')
@@ -148,15 +139,14 @@ export default function UserManagePage() {
     }
   }
 
-  /* ── query permission ── */
   const openPermModal = async (userId: number) => {
     setPermUserId(userId)
     setPermModalOpen(true)
     setPermKbScope('personal')
     setPermDbScope([])
+    setPermExtractEnabled(false)
     setDbLoading(true)
 
-    // Fetch current permission + active DB connections in parallel
     try {
       const [perm, conns] = await Promise.all([
         getUserQueryPermission(userId),
@@ -164,6 +154,7 @@ export default function UserManagePage() {
       ])
       setPermKbScope(perm.kb_scope || 'personal')
       setPermDbScope(perm.db_scope || [])
+      setPermExtractEnabled(perm.exp_extract_enabled || false)
       setDbConnections(conns)
     } catch (err: any) {
       toast.error(err.message || '加载权限信息失败')
@@ -179,10 +170,11 @@ export default function UserManagePage() {
       await setUserQueryPermission(permUserId, {
         kb_scope: permKbScope,
         db_scope: permDbScope.length > 0 ? permDbScope : null,
+        exp_extract_enabled: permExtractEnabled,
       })
       toast.success('修改成功')
       setPermModalOpen(false)
-      fetchUsers() // refresh list to show updated scope
+      fetchUsers()
     } catch (err: any) {
       toast.error(err.message || '保存权限失败')
     } finally {
@@ -190,7 +182,6 @@ export default function UserManagePage() {
     }
   }
 
-  /* ── columns ── */
   const columns = [
     { title: 'ID', dataIndex: 'id', key: 'id', width: 70 },
     { title: '账号', dataIndex: 'account', key: 'account', width: 150 },
@@ -213,6 +204,7 @@ export default function UserManagePage() {
       title: '操作', key: 'action', width: 250,
       render: (_: any, record: UserRecord) => (
         <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+          <span className="perm-section">
           <Button
             type="link"
             size="small"
@@ -221,6 +213,7 @@ export default function UserManagePage() {
           >
             查询权限
           </Button>
+          </span>
           <Button
             type="link"
             size="small"
@@ -243,16 +236,12 @@ export default function UserManagePage() {
     },
   ]
 
-  /* ── active DB connections for permission modal ── */
   const activeDbConns = dbConnections.filter(c => c.status === 'connected')
 
   return (
     <div style={{ height: '100%', padding: '32px', overflow: 'auto' }}>
-      {/* ── New user card ── */}
       <div className="page-card">
-        <h3 className="page-card-heading">
-          <PlusOutlined style={{ marginRight: 8 }} />
-          新增用户
+        <h3 className="page-card-heading">新增用户
         </h3>
 
         <div style={{
@@ -325,7 +314,6 @@ export default function UserManagePage() {
         />
       </div>
 
-      {/* ── Change password modal ── */}
       <Modal
         title="修改密码"
         open={cpModalOpen}
@@ -348,7 +336,6 @@ export default function UserManagePage() {
         </div>
       </Modal>
 
-      {/* ── Delete user modal ── */}
       <Modal
         title="删除用户"
         open={delModalOpen}
@@ -370,7 +357,6 @@ export default function UserManagePage() {
         </div>
       </Modal>
 
-      {/* ── Query permission modal ── */}
       <Modal
         title="查询权限"
         open={permModalOpen}
@@ -383,12 +369,10 @@ export default function UserManagePage() {
       >
         <Spin spinning={dbLoading}>
           <div style={{ margin: '12px 0' }}>
-            {/* Account info */}
             <div style={{ marginBottom: 16, color: '#6b7280', fontSize: 13 }}>
               账号：{users.find(u => u.id === permUserId)?.account ?? ''}
             </div>
 
-            {/* KB scope */}
             <div style={{ marginBottom: 20 }}>
               <div style={{ marginBottom: 8, fontWeight: 600, fontSize: 14 }}>知识库查询范围</div>
               <Radio.Group
@@ -402,7 +386,19 @@ export default function UserManagePage() {
               </Radio.Group>
             </div>
 
-            {/* DB scope */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ marginBottom: 8, fontWeight: 600, fontSize: 14 }}>经验提取</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <Switch
+                  checked={permExtractEnabled}
+                  onChange={setPermExtractEnabled}
+                />
+                <span style={{ fontSize: 13, color: '#6b7280' }}>
+                  允许该用户的 👍 操作触发经验提取
+                </span>
+              </div>
+            </div>
+
             <div style={{ marginBottom: 8 }}>
               <div style={{ marginBottom: 8, fontWeight: 600, fontSize: 14 }}>数据库查询范围</div>
               {activeDbConns.length === 0 ? (

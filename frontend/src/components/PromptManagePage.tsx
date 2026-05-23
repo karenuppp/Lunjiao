@@ -19,7 +19,7 @@ export default function PromptManagePage() {
   // Form state
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
-  const [editingId, setEditingId] = useState<number | null>(null) // null = adding mode
+  const [editingId, setEditingId] = useState<number | null>(null)
 
   const fetchTemplates = useCallback(async () => {
     setLoading(true)
@@ -37,7 +37,6 @@ export default function PromptManagePage() {
     fetchTemplates()
   }, [fetchTemplates])
 
-  // True when user is editing an existing template (vs. creating a new one)
   const isEditing = editingId !== null
 
   function resetForm() {
@@ -95,17 +94,12 @@ export default function PromptManagePage() {
     try {
       await deletePromptTemplate(id)
       toast.success('删除成功')
-      // If currently editing this template, reset the form
       if (editingId === id) resetForm()
       await fetchTemplates()
     } catch (err: any) {
       toast.error('删除失败: ' + err.message)
     }
   }
-
-  // ============================================================
-  // Table columns
-  // ============================================================
 
   const columns: ColumnsType<PromptTemplate> = [
     {
@@ -168,7 +162,6 @@ export default function PromptManagePage() {
 
   return (
     <div style={{ padding: 24, height: '100%', overflow: 'auto' }}>
-      {/* ── Editor card ── */}
       <div className="page-card">
         <h2 className="page-card-heading">
           {isEditing ? '修改提示词模板' : '新增提示词模板'}
@@ -187,8 +180,8 @@ export default function PromptManagePage() {
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 500, color: '#374151' }}>
-            System Prompt
+          <div className="system-prompt-label" style={{ marginBottom: 8, fontSize: 13, fontWeight: 500, color: '#374151' }}>
+            系统提示词
           </div>
           <Input.TextArea
             value={content}
@@ -230,7 +223,6 @@ export default function PromptManagePage() {
         </div>
       </div>
 
-      {/* ── Template list card ── */}
       <div className="page-card">
         <h2 className="page-card-heading">提示词模板列表</h2>
         <Table

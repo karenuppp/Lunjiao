@@ -1,8 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, List, Dict, Any
 import uuid
 import json
+import traceback
 
 from starlette.responses import StreamingResponse
 
@@ -57,15 +58,10 @@ class ChatResponse(BaseModel):
     report_text: Optional[str] = None
 
 
-# ============================================================
-# In-memory conversation store (replace with DB later)
-# ============================================================
-
 _conversations: Dict[str, list] = {}
 
 
 def _get_or_create_conversation(conv_id: str | None) -> tuple[str, list]:
-    """Get existing or create a new conversation."""
     if conv_id and conv_id in _conversations:
         return conv_id, _conversations[conv_id]
 
@@ -75,22 +71,15 @@ def _get_or_create_conversation(conv_id: str | None) -> tuple[str, list]:
 
 
 def _add_to_history(conv_id: str, role: str, content: str):
-    """Add message to conversation history."""
     if conv_id in _conversations:
         _conversations[conv_id].append({"role": role, "content": content})
 
 
-# ============================================================
-# Non-streaming endpoint (for backward compatibility)
-# ============================================================
-
 @router.post("/")
 async def chat(request: ChatRequest):
-    """Synchronous chat — returns full answer after agent completes."""
 
     conv_id, history = _get_or_create_conversation(request.conversation_id)
 
-    # Build messages for the agent
     agent_history = []
     for msg in history:
         agent_history.append(msg)
@@ -98,7 +87,6 @@ async def chat(request: ChatRequest):
         for msg in request.history:
             agent_history.append(msg)
 
-    # Call agent (default to "default" if user_id not provided for backward compat)
     user_id = request.user_id or "default"
     kb_scope, db_scope = _resolve_permissions(user_id)
     result = run_agent_sync(
@@ -110,7 +98,6 @@ async def chat(request: ChatRequest):
         default_category=request.category or "",
     )
 
-    # Store conversation
     _add_to_history(conv_id, "user", request.message)
     if isinstance(result.get("answer"), str):
         _add_to_history(conv_id, "assistant", result["answer"])
@@ -124,26 +111,11 @@ async def chat(request: ChatRequest):
     )
 
 
-# ============================================================
-# Streaming endpoint (SSE) — main interface for frontend
-# ============================================================
-
 @router.post("/stream")
 async def chat_stream(request: ChatRequest):
-    """Streaming chat via Server-Sent Events.
-
-    Event types sent to the client:
-      - token:        text chunk from LLM
-      - tool_call_start:  when a tool is about to be called
-      - tool_call_end:    when a tool call completes
-      - final_answer:   complete answer text after streaming finishes
-      - error:          on failure
-    """
-
     conv_id, history = _get_or_create_conversation(request.conversation_id)
 
     async def event_generator():
-        # Send initial connection event
         yield "event: connected\ndata: {\"conversation_id\": \"%s\"}\n\n" % conv_id
 
         agent_history = []
@@ -165,7 +137,6 @@ async def chat_stream(request: ChatRequest):
         ):
             yield event_line
 
-        # Store conversation after completion
         _add_to_history(conv_id, "user", request.message)
 
     return StreamingResponse(
@@ -174,6 +145,84 @@ async def chat_stream(request: ChatRequest):
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",  # Disable nginx buffering
+            "X-Accel-Buffering": "no",
         },
     )
+
+
+class FeedbackRequest(BaseModel):
+    conversation_id: str
+    message_id: str           # the AI message being rated
+    rating: str               # "up" or "down"
+    user_id: Optional[str] = None
+
+
+@router.post("/feedback")
+async def submit_feedback(request: FeedbackRequest, background_tasks: BackgroundTasks):
+    user_id = request.user_id or "default"
+
+    if request.rating == "up":
+        can_extract = False
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.account == user_id).first()
+            if user and user.exp_extract_enabled:
+                can_extract = True
+        finally:
+            db.close()
+
+        if can_extract:
+            conv_id, history = _get_or_create_conversation(request.conversation_id)
+
+            user_question = ""
+            ai_answer = ""
+            for msg in reversed(history):
+                if msg["role"] == "assistant" and not ai_answer:
+                    ai_answer = msg["content"]
+                elif msg["role"] == "user" and not user_question:
+                    user_question = msg["content"]
+                if user_question and ai_answer:
+                    break
+
+            if user_question and ai_answer:
+                background_tasks.add_task(
+                    _extract_experiences_bg,
+                    user_question=user_question,
+                    ai_answer=ai_answer,
+                    user_id=user_id,
+                    conv_id=conv_id,
+                    msg_id=request.message_id,
+                )
+
+    return {"ok": True, "rating": request.rating}
+
+
+def _extract_experiences_bg(
+    user_question: str,
+    ai_answer: str,
+    user_id: str,
+    conv_id: str,
+    msg_id: str,
+):
+    try:
+        import asyncio
+        from app.services.experience_service import extract_and_save
+
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            count = loop.run_until_complete(
+                extract_and_save(
+                    user_question=user_question,
+                    ai_answer=ai_answer,
+                    user_id=user_id,
+                    conv_id=conv_id,
+                    msg_id=msg_id,
+                )
+            )
+            print(f"[Feedback] Extracted {count} experience(s) for user {user_id}")
+        finally:
+            loop.close()
+    except Exception as e:
+        print(f"[Feedback] Background extraction failed: {e}")
+        traceback.print_exc()

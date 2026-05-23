@@ -1,11 +1,17 @@
+import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Button } from 'antd'
+import { Button, Modal, Input } from 'antd'
 import {
   MenuUnfoldOutlined,
   MenuFoldOutlined,
   LogoutOutlined,
+  QuestionCircleOutlined,
+  MessageOutlined,
 } from '@ant-design/icons'
 import { useChat } from '../store/chatStore'
+import { useTour } from '../store/tourStore'
+import { submitOpinion } from '../api/chat'
+import { useToast } from './Toast'
 
 interface AppHeaderProps {
   collapsed: boolean
@@ -21,6 +27,12 @@ export default function AppHeader({
   const navigate = useNavigate()
   const location = useLocation()
   const chat = useChat()
+  const tour = useTour()
+  const toast = useToast()
+
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [feedbackContent, setFeedbackContent] = useState('')
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
 
   const handleLogout = () => {
     chat.logout()
@@ -28,6 +40,28 @@ export default function AppHeader({
   }
 
   const isAdmin = chat.role === 'admin'
+
+  const handleStartTour = () => {
+    tour.startTour(isAdmin)
+  }
+
+  const handleSubmitFeedback = async () => {
+    if (!feedbackContent.trim()) {
+      toast.error('请输入反馈内容')
+      return
+    }
+    setFeedbackSubmitting(true)
+    try {
+      await submitOpinion(feedbackContent.trim())
+      toast.success('感谢您的反馈！')
+      setFeedbackOpen(false)
+      setFeedbackContent('')
+    } catch {
+      toast.error('提交失败，请稍后再试')
+    } finally {
+      setFeedbackSubmitting(false)
+    }
+  }
 
   return (
     <div className="top-bar">
@@ -45,7 +79,7 @@ export default function AppHeader({
             className={`header-tab ${location.pathname === '/chat' || location.pathname === '/' ? 'header-tab--active' : ''}`}
             onClick={() => navigate('/chat')}
           >
-            AI 智能问答
+            智能问答
           </button>
 
           <button
@@ -81,6 +115,15 @@ export default function AppHeader({
               提示词管理
             </button>
           )}
+
+          {isAdmin && (
+            <button
+              className={`header-tab ${location.pathname.startsWith('/admin/experience') ? 'header-tab--active' : ''}`}
+              onClick={() => navigate('/admin/experience')}
+            >
+              经验管理
+            </button>
+          )}
         </nav>
       </div>
 
@@ -98,10 +141,56 @@ export default function AppHeader({
         {sessionTitle}
       </span>
 
-      <div className="logout-btn-box" onClick={handleLogout}>
-        <LogoutOutlined style={{ color: '#EF4444' }} />
-        <span style={{ color: '#EF4444', fontSize: 13 }}>退出</span>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div
+          className="help-btn-box"
+          onClick={handleStartTour}
+          title="使用说明"
+        >
+          <QuestionCircleOutlined style={{ color: '#4F46E5' }} />
+          <span style={{ color: '#4F46E5', fontSize: 13 }}>使用说明</span>
+        </div>
+        <div
+          className="help-btn-box"
+          onClick={() => setFeedbackOpen(true)}
+          title="反馈"
+        >
+          <MessageOutlined style={{ color: '#4F46E5' }} />
+          <span style={{ color: '#4F46E5', fontSize: 13 }}>反馈</span>
+        </div>
+        <div className="logout-btn-box" onClick={handleLogout}>
+          <LogoutOutlined style={{ color: '#EF4444' }} />
+          <span style={{ color: '#EF4444', fontSize: 13 }}>退出</span>
+        </div>
       </div>
+
+      <Modal
+        title="反馈内容"
+        open={feedbackOpen}
+        onCancel={() => { setFeedbackOpen(false); setFeedbackContent('') }}
+        footer={null}
+        width={480}
+        destroyOnClose
+      >
+        <div style={{ marginTop: 12 }}>
+          <Input.TextArea
+            value={feedbackContent}
+            onChange={(e) => setFeedbackContent(e.target.value)}
+            placeholder="请输入您的反馈意见…"
+            rows={6}
+            style={{ fontSize: 14, lineHeight: 1.6 }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+            <Button
+              type="primary"
+              onClick={handleSubmitFeedback}
+              loading={feedbackSubmitting}
+            >
+              提交
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }

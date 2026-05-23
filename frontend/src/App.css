@@ -1,88 +1,69 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap');
 @import 'antd/dist/reset.css';
 
-/* ============================================================
-   Design Tokens — Lunjiao Enterprise SaaS System
-   Pattern: Professional · Trustworthy · Refined
-   Palette: Indigo → Violet gradient CTA
-   ============================================================ */
 :root {
-  /* ═══ Primary Colors ═══ */
-  --color-primary:        #4F46E5;   /* Indigo 600 — main buttons, links, active states */
-  --color-primary-hover:  #4338CA;   /* Indigo 700 — hover deepening */
-  --color-primary-light:  #EEF2FF;   /* Indigo 50  — light backgrounds */
-  --color-primary-muted:  #C7D2FE;   /* Indigo 200 — border, tags */
+  --color-primary:        #4F46E5;
+  --color-primary-hover:  #4338CA;
+  --color-primary-light:  #EEF2FF;
+  --color-primary-muted:  #C7D2FE;
 
-  --color-secondary:      #7C3AED;   /* Violet 600 — accent/emphasis */
-  --color-secondary-light:#F5F3FF;   /* Violet 50 */
+  --color-secondary:      #7C3AED;
+  --color-secondary-light:#F5F3FF;
 
-  /* ═══ Semantic Surfaces ═══ */
-  --surface-bg:           #F8FAFC;   /* Slate 50 — main background */
-  --surface-card:         #FFFFFF;   /* White — card/panel */
-  --surface-hover:        #F1F5F9;   /* Slate 100 — list item hover */
-  --surface-raised:       #FFFFFF;   /* Modal/dialog */
+  --surface-bg:           #F8FAFC;
+  --surface-card:         #FFFFFF;
+  --surface-hover:        #F1F5F9;
+  --surface-raised:       #FFFFFF;
 
-  /* ═══ Sidebar (Dark) ═══ */
-  --sidebar-bg:           #0F172A;   /* Slate 900 */
-  --sidebar-text:         #94A3B8;   /* Slate 400 */
+  --sidebar-bg:           #0F172A;
+  --sidebar-text:         #94A3B8;
   --sidebar-text-active:  #FFFFFF;
   --sidebar-border:       rgba(255, 255, 255, 0.06);
   --sidebar-hover:        rgba(255, 255, 255, 0.05);
   --sidebar-active:       rgba(79, 70, 229, 0.15);
 
-  /* ═══ Text Colors ═══ */
-  --text-primary:         #0F172A;   /* Slate 900 */
-  --text-secondary:       #475569;   /* Slate 600 */
-  --text-tertiary:        #94A3B8;   /* Slate 400 */
+  --text-primary:         #0F172A;
+  --text-secondary:       #475569;
+  --text-tertiary:        #94A3B8;
   --text-inverse:         #FFFFFF;
 
-  /* ═══ Border & Divider ═══ */
   --border-subtle:        rgba(0, 0, 0, 0.06);
-  --border-default:       #E2E8F0;   /* Slate 200 */
+  --border-default:       #E2E8F0;
   --divider-color:        #E2E8F0;
 
-  /* ═══ Status Colors ═══ */
-  --status-success:       #10B981;   /* Emerald 500 */
-  --status-success-light: #D1FAE5;   /* Emerald 100 */
-  --status-warning:       #F59E0B;   /* Amber 500 */
-  --status-warning-light: #FEF3C7;   /* Amber 100 */
-  --status-error:         #EF4444;   /* Red 500 */
-  --status-error-light:   #FEE2E2;   /* Red 100 */
+  --status-success:       #10B981;
+  --status-success-light: #D1FAE5;
+  --status-warning:       #F59E0B;
+  --status-warning-light: #FEF3C7;
+  --status-error:         #EF4444;
+  --status-error-light:   #FEE2E2;
 
-  /* ═══ Chat specific ═══ */
   --msg-user-bg:          var(--color-primary);
   --msg-user-text:        #FFFFFF;
   --msg-ai-bg:            #FFFFFF;
   --msg-ai-border:        var(--border-default);
 
-  /* ═══ Radius Tokens ═══ */
   --radius-sm:            6px;
   --radius-md:            10px;
   --radius-lg:            16px;
   --radius-xl:            24px;
   --radius-full:          9999px;
 
-  /* ═══ Shadow Tokens ═══ */
   --shadow-sm:            0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-md:            0 4px 12px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
   --shadow-lg:            0 8px 32px rgba(0, 0, 0, 0.08), 0 2px 8px rgba(0, 0, 0, 0.04);
   --shadow-colored:       0 4px 14px rgba(79, 70, 229, 0.15);
 
-  /* ═══ Typography Tokens ═══ */
   --font-heading: 'Plus Jakarta Sans', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-body:    'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-mono:      'JetBrains Mono', 'SF Mono', monospace;
 
-  /* ═══ Transition Tokens ═══ */
   --transition-fast:   150ms ease;
   --transition-base:   200ms ease;
   --transition-slow:   300ms ease;
 }
 
 
-/* ============================================================
-   Global Reset + Base Styles
-   ============================================================ */
 *, *::before, *::after { box-sizing: border-box; }
 
 html, body {
@@ -96,9 +77,6 @@ html, body {
 #root { width: 100vw; height: 100vh; overflow: hidden; }
 
 
-/* ============================================================
-   Ant Design Global Overrides
-   ============================================================ */
 .ant-btn {
   border-radius: var(--radius-md) !important;
   font-weight: 500 !important;
@@ -130,7 +108,6 @@ html, body {
 
 .ant-tooltip-inner { font-size: 12px !important; }
 
-/* Sidebar input overrides */
 .ant-input-affix-wrapper {
   background: rgba(255, 255, 255, 0.06) !important;
   border: none !important;
@@ -140,18 +117,12 @@ html, body {
 .ant-input-affix-wrapper input::placeholder { color: var(--sidebar-text) !important; }
 
 
-/* ============================================================
-   Scrollbar (thin, minimal) — reused throughout app
-   ============================================================ */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.15); }
 
 
-/* ============================================================
-   App Layout
-   ============================================================ */
 .app-layout {
   height: 100vh !important; width: 100vw !important;
   background: var(--surface-bg) !important;
@@ -170,9 +141,6 @@ html, body {
 }
 
 
-/* ============================================================
-   Top Header Bar
-   ============================================================ */
 .top-bar {
   height: 56px; padding: 0 24px;
   display: flex; align-items: center; justify-content: space-between;
@@ -192,7 +160,6 @@ html, body {
 .header-tab:hover { color: #4F46E5; background: rgba(79, 70, 229, 0.06); }
 .header-tab--active { color: #4F46E5; background: rgba(79, 70, 229, 0.1); font-weight: 600; }
 
-/* Logout button — bordered pill container */
 .logout-btn-box {
   display: flex; align-items: center; gap: 6px; padding: 4px 12px;
   border: 1px solid #E5E7EB; border-radius: 8px; cursor: pointer;
@@ -202,10 +169,16 @@ html, body {
   border-color: #EF4444; background: #FEF2F2; color: #EF4444;
 }
 
+.help-btn-box {
+  display: flex; align-items: center; gap: 6px; padding: 4px 12px;
+  border: 1px solid #E5E7EB; border-radius: 8px; cursor: pointer;
+  background: white; transition: all 0.15s ease;
+}
+.help-btn-box:hover {
+  border-color: #4F46E5; background: #EEF2FF; color: #4F46E5;
+}
 
-/* ============================================================
-   Chat Panel — Message Area
-   ============================================================ */
+
 .chat-area {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
   width: 100%; padding: 0 36px;
@@ -219,9 +192,6 @@ html, body {
 .message { animation: fadeInUp var(--transition-slow) ease-out; }
 
 
-/* ============================================================
-   Chat Input Area
-   ============================================================ */
 .chat-input-area { padding: 16px 0; flex-shrink: 0; }
 
 .input-wrapper textarea {
@@ -241,9 +211,6 @@ html, body {
 }
 
 
-/* ============================================================
-   Send Button
-   ============================================================ */
 .send-btn {
   padding: 6px 20px; border: none; border-radius: var(--radius-sm);
   background: #D1D5DB; color: #FFF; font-size: 14px;
@@ -251,16 +218,12 @@ html, body {
 }
 
 .send-btn.active {
-  /* Indigo → Violet gradient CTA */
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
   cursor: pointer; box-shadow: var(--shadow-colored);
 }
 .send-btn.active:hover { opacity: 0.92; transform: translateY(-1px); }
 
 
-/* ============================================================
-   Category Chips — Pill Style (Chat Panel)
-   ============================================================ */
 .category-chips { display: flex; gap: 6px; }
 
 .cat-chip {
@@ -269,9 +232,6 @@ html, body {
 }
 
 
-/* ============================================================
-   Input Buttons (left side of chat input)
-   ============================================================ */
 .input-btn {
   font-size: 13px; padding: 5px 12px; border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm); background: transparent;
@@ -281,9 +241,6 @@ html, body {
 .input-btn:hover { background: #F5F6F8; color: var(--text-primary); }
 
 
-/* ============================================================
-   Upload Zone (Chat Panel — file upload before chat)
-   ============================================================ */
 .upload-zone {
   display: flex; align-items: center; justify-content: center;
   padding: 12px 16px; margin-bottom: 8px;
@@ -300,9 +257,6 @@ html, body {
 }
 
 
-/* ============================================================
-   Uploaded File Chips (Chat Panel)
-   ============================================================ */
 .uploaded-files-list { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
 
 .uploaded-file-chip {
@@ -318,9 +272,6 @@ html, body {
 .uploaded-file-chip .remove-btn:hover { color: var(--status-error); }
 
 
-/* ============================================================
-   Data Source Badge (in assistant messages)
-   ============================================================ */
 .data-source-badge {
   display: inline-flex; align-items: center; gap: 3px; font-size: 11px;
   padding: 2px 8px; border-radius: var(--radius-sm);
@@ -328,9 +279,6 @@ html, body {
 }
 
 
-/* ============================================================
-   Tool Call Indicator (thinking/processing)
-   ============================================================ */
 .tool-call-indicator {
   font-size: 13px; padding: 8px 14px; margin-bottom: 8px;
   border-radius: var(--radius-sm); background: rgba(79, 70, 229, 0.05);
@@ -344,9 +292,6 @@ html, body {
 }
 
 
-/* ============================================================
-   Empty State (Chat Panel)
-   ============================================================ */
 .chat-empty {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding-top: 24vh; text-align: center;
@@ -354,16 +299,12 @@ html, body {
 
 .empty-icon { font-size: 56px; margin-bottom: 16px; opacity: 0.7; }
 
-/* Empty state — centered in the upload area */
 .empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 32px 0; text-align: center; color: #9CA3AF; max-width: 480px; margin-left: auto; margin-right: auto; width: fit-content;
 }
 
 
-/* ============================================================
-   Suggestion Chips (empty chat — prompts to try)
-   ============================================================ */
 .suggestion-chips button {
   background: #FFFFFF; border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm); padding: 8px 16px; font-size: 13px;
@@ -374,9 +315,6 @@ html, body {
 }
 
 
-/* ============================================================
-   Sidebar Component Styles
-   ============================================================ */
 .sidebar-container {
   padding: 16px 8px; height: 100%; display: flex; flex-direction: column; gap: 4px;
 }
@@ -421,7 +359,6 @@ html, body {
 .conv-item:hover .remove-conv-btn { opacity: 1; }
 .remove-conv-btn:hover { color: #EF4444; background: rgba(239,68,68,0.1); }
 
-/* Sidebar footer / Knowledge base entry */
 .sidebar-footer { border-top: 1px solid var(--sidebar-border); padding-top: 8px; margin-top: 4px; }
 
 .kb-entry-btn {
@@ -432,11 +369,6 @@ html, body {
 .kb-entry-btn:hover { background: var(--sidebar-hover); color: #E5E7EB; }
 
 
-/* ============================================================
-   Knowledge Base Management Page — Unified Layout
-   ============================================================ */
-
-/* --- Toolbar (replaces old tab bar) --- */
 .kb-toolbar {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   padding: 10px 24px; background: #FFFFFF; border-bottom: 1px solid #E8E8E8;
@@ -445,7 +377,6 @@ html, body {
 .kb-toolbar-left  { display: flex; align-items: center; gap: 8px; }
 .kb-toolbar-right { display: flex; align-items: center; gap: 8px; }
 
-/* --- Retrieval Settings Panel --- */
 .kb-settings-panel {
   margin: 0 24px; padding: 12px 16px; background: #F8FAFC;
   border: 1px solid #E8E8E8; border-top: none; border-radius: 0 0 8px 8px;
@@ -457,7 +388,6 @@ html, body {
 .kb-settings-label { font-size: 12px; font-weight: 500; color: #6B7280; white-space: nowrap; }
 .kb-settings-hint { margin-top: 8px; font-size: 11px; color: #9CA3AF; line-height: 1.5; }
 
-/* --- Upload drag zone (inside modal) --- */
 .kb-upload-container { width: 100%; }
 .kb-upload-zone {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -476,7 +406,6 @@ html, body {
 .zone-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px; }
 .zone-hint { font-size: 12px; color: #9CA3AF; line-height: 1.6; }
 
-/* --- Scope toggle — chip style --- */
 .scope-toggle { display: flex; gap: 3px; background: #F3F4F6; border-radius: 6px; padding: 3px; height: 32px; }
 .scope-toggle button {
   padding: 3px 14px; font-size: 14px; font-weight: 500; color: #6b7280;
@@ -491,9 +420,6 @@ html, body {
 }
 .kb-pending-item:hover { background: #F3F4F6; }
 
-/* ============================================================
-   Shared Page Card — used by UserManagePage & KbManagePage
-   ============================================================ */
 .page-card {
   background: #FFFFFF;
   border-radius: 12px;
@@ -509,7 +435,6 @@ html, body {
   color: #1a1b2e;
 }
 
-/* File type icon — colored rounded square */
 .file-icon {
   width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
@@ -527,7 +452,6 @@ html, body {
 .file-name { font-size: 13px; font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .file-size { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
 
-/* Remove / delete button */
 .remove-btn {
   background: none; border: none; color: var(--text-tertiary); cursor: pointer; padding: 4px;
   border-radius: 4px; line-height: 1; transition: all 0.15s ease; flex-shrink: 0;
@@ -535,11 +459,9 @@ html, body {
 .remove-btn:hover { color: var(--status-error); background: #FEF2F2; }
 .remove-btn.disabled { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 
-/* --- Section header --- */
 .section-header { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 8px; }
 .section-title { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 
-/* --- Confirm upload button --- */
 .confirm-btn {
   padding: 8px 24px; border: none; border-radius: 6px;
   background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
@@ -549,13 +471,11 @@ html, body {
 .confirm-btn:hover { opacity: 0.92; box-shadow: 0 2px 8px rgba(79,70,229,0.3); transform: translateY(-1px); }
 .confirm-btn:disabled { background: #D1D5DB !important; cursor: not-allowed; box-shadow: none; transform: none; }
 
-/* --- Overall progress bar --- */
 .kb-overall-progress { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
 .overall-bar { flex: 1; height: 5px; border-radius: 3px; background: #E5E7EB; overflow: hidden; }
 .overall-fill { height: 100%; border-radius: 3px; background: var(--color-primary); transition: width 0.3s ease; }
 .overall-text { font-size: 12px; color: #9CA3AF; white-space: nowrap; min-width: 50px; text-align: right; }
 
-/* --- Per-file progress items --- */
 .kb-progress-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; max-height: 200px; overflow-y: auto; }
 .kb-progress-item {
   display: flex; align-items: center; gap: 8px; padding: 8px 12px;
@@ -570,7 +490,6 @@ html, body {
 .progress-desc { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
 .progress-error { font-size: 11px; color: var(--status-error); margin-top: 2px; }
 
-/* --- Archive children within progress items --- */
 .kb-archive-children {
   margin-top: 6px;
   margin-left: 26px;
@@ -596,7 +515,6 @@ html, body {
   font-size: 10px;
 }
 
-/* --- Empty state --- */
 .empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 32px 16px; color: #9CA3AF;
@@ -604,9 +522,6 @@ html, body {
 .empty-icon { font-size: 48px; opacity: 0.5; margin-bottom: 12px; }
 
 
-/* ============================================================
-   Toast Notifications — drops from top of browser
-   ============================================================ */
 .toast-container {
   position: fixed;
   top: 24px;
@@ -656,10 +571,6 @@ html, body {
   }
 }
 
-/* ============================================================
-   Animations
-   ============================================================ */
-
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(12px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -670,9 +581,6 @@ html, body {
 }
 
 
-/* ============================================================
-   Reduced Motion — Accessibility
-   ============================================================ */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

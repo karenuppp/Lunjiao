@@ -1,7 +1,3 @@
-"""
-Database connection model — stores user-managed database connections.
-Each connection points to a MySQL database that the AI agent can query.
-"""
 from sqlalchemy import Column, BigInteger, String, Integer, Text, DateTime
 from sqlalchemy.sql import func
 from app.database import Base
