@@ -571,6 +571,31 @@ async def rag_stats(user_id: str = "default"):
         return {"message": f"Stats not available: {str(e)}"}
 
 
+@router.put("/files/{file_id}/category")
+async def update_file_category(file_id: str, category: str = Form(...)):
+    """Update the category tag of a previously uploaded file.
+
+    Writes the new category to the companion .meta file so the tag
+    persists across server restarts.
+    """
+    upload_dir = Path(settings.upload_dir)
+    meta_path = upload_dir / f"{file_id}.meta"
+
+    if not meta_path.exists():
+        raise HTTPException(404, f"File metadata not found for {file_id}")
+
+    try:
+        with open(meta_path, "r", encoding="utf-8") as f:
+            meta = json.load(f)
+        meta["category"] = category
+        with open(meta_path, "w", encoding="utf-8") as f:
+            json.dump(meta, f, ensure_ascii=False)
+    except Exception as e:
+        raise HTTPException(500, f"Failed to update category: {e}")
+
+    return {"ok": True, "file_id": file_id, "category": category}
+
+
 @router.delete("/files/{file_id}")
 async def delete_uploaded_file(file_id: str, user_id: str = "default"):
     """Delete an uploaded file and remove from RAG index."""

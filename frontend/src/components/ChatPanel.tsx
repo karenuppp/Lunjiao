@@ -1,7 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { Select, Spin } from 'antd'
 import { MessageSquare, User, Sparkles, Loader2, X, SendHorizontal, FileText, Table2, Presentation, Archive, Image as ImageIcon, FileType, Paperclip } from 'lucide-react'
+import { listPromptTemplates, type PromptTemplate } from '../api/chat'
 import './chat.css'
 
 interface Message {
@@ -21,7 +23,7 @@ interface ChatPanelProps {
   messages: Message[]
   isLoading: boolean
   currentTool: string | null
-  onSendChat: (message: string, contextFiles?: ContextFile[]) => void
+  onSendChat: (message: string, contextFiles?: ContextFile[], category?: string) => void
 }
 
 let fileIdCounter = 0
@@ -61,9 +63,31 @@ export default function ChatPanel({
   const [contextFiles, setContextFiles] = useState<ContextFile[]>([])
   const [dragOver, setDragOver] = useState(false)
 
+  // Prompt template
+  const [templates, setTemplates] = useState<PromptTemplate[]>([])
+  const [templatesLoading, setTemplatesLoading] = useState(false)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<number | undefined>(undefined)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Load templates on mount
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      setTemplatesLoading(true)
+      try {
+        const data = await listPromptTemplates()
+        if (!cancelled) setTemplates(data)
+      } catch { /* silently ignore — templates are optional */ }
+      finally {
+        if (!cancelled) setTemplatesLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -76,6 +100,7 @@ export default function ChatPanel({
     el.style.height = el.scrollHeight + 'px'
   }, [input])
 
+  const selectedTemplate = templates.find(t => t.id === selectedTemplateId)
   const canSend = (input.trim().length > 0 || contextFiles.length > 0) && !isLoading
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
@@ -92,7 +117,6 @@ export default function ChatPanel({
   const handleDragLeave = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    // Only set false if we're leaving the container
     const target = e.currentTarget as HTMLElement
     const related = e.relatedTarget as HTMLElement | null
     if (!related || !target.contains(related)) {
@@ -138,13 +162,25 @@ export default function ChatPanel({
       }
       return next
     })
-    // Reset so same file can be re-selected
     e.target.value = ''
   }
 
   const handleSend = () => {
     if (!canSend) return
-    onSendChat(input.trim(), contextFiles.length > 0 ? contextFiles : undefined)
+
+    // Assemble message: template → files → user input
+    let message = ''
+    if (selectedTemplate) {
+      message += selectedTemplate.content + '\n\n'
+    }
+    if (contextFiles.length > 0) {
+      message += '参考文件：\n'
+      message += contextFiles.map(f => `- ${f.name}`).join('\n')
+      message += '\n\n'
+    }
+    message += input.trim()
+
+    onSendChat(message, contextFiles.length > 0 ? contextFiles : undefined, selectedTemplate?.title)
     setInput('')
     setContextFiles([])
   }
@@ -154,6 +190,11 @@ export default function ChatPanel({
       e.preventDefault()
       handleSend()
     }
+  }
+
+  // Styles for the select dropdown to blend with chat UI
+  const selectStyles = {
+    minWidth: 200,
   }
 
   return (
@@ -236,23 +277,40 @@ export default function ChatPanel({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {contextFiles.length > 0 && (
-          <div className="context-files-bar">
-            {contextFiles.map((cf) => {
-              const meta = getFileTypeMeta(cf.name)
-              return (
-                <div key={cf.id} className={`context-file-chip ${meta.colorClass}`}>
-                  <div className="cf-icon">{meta.icon}</div>
-                  <span className="cf-name" title={cf.name}>{cf.name}</span>
-                  <span className="cf-size">{formatFileSize(cf.size)}</span>
-                  <button className="cf-remove" onClick={() => removeContextFile(cf.id)} title="移除">
-                    <X size={12} />
-                  </button>
-                </div>
-              )
-            })}
-          </div>
-        )}
+        {/* ── Template selector row (above input) ── */}
+        <div className="template-selector-row">
+          {templatesLoading ? (
+            <span className="template-selector-label">
+              <Spin size="small" style={{ marginRight: 6 }} />
+              加载模板…
+            </span>
+          ) : (
+            <Select
+              value={selectedTemplateId}
+              onChange={(val) => setSelectedTemplateId(val)}
+              placeholder="选择提示词模板（可选）"
+              allowClear
+              style={selectStyles}
+              options={templates.map(t => ({
+                value: t.id,
+                label: t.title,
+              }))}
+              notFoundContent={templates.length === 0 ? '暂无提示词模板' : undefined}
+            />
+          )}
+          {selectedTemplate && (
+            <span className="template-chip">
+              <span className="template-chip-name">{selectedTemplate.title}</span>
+              <button
+                className="template-chip-remove"
+                onClick={() => setSelectedTemplateId(undefined)}
+                title="取消选择"
+              >
+                <X size={12} />
+              </button>
+            </span>
+          )}
+        </div>
 
         <div className="input-wrapper">
           <textarea
@@ -289,6 +347,25 @@ export default function ChatPanel({
             ) : '发送'}
           </button>
         </div>
+
+        {/* ── Context files bar (below input) ── */}
+        {contextFiles.length > 0 && (
+          <div className="context-files-bar">
+            {contextFiles.map((cf) => {
+              const meta = getFileTypeMeta(cf.name)
+              return (
+                <div key={cf.id} className={`context-file-chip ${meta.colorClass}`}>
+                  <div className="cf-icon">{meta.icon}</div>
+                  <span className="cf-name" title={cf.name}>{cf.name}</span>
+                  <span className="cf-size">{formatFileSize(cf.size)}</span>
+                  <button className="cf-remove" onClick={() => removeContextFile(cf.id)} title="移除">
+                    <X size={12} />
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )

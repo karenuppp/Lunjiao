@@ -24,6 +24,23 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
 
+def _migrate():
+    """Run schema migrations before any ORM queries touch the database."""
+    with engine.connect() as conn:
+        try:
+            conn.execute(
+                __import__("sqlalchemy").text(
+                    "ALTER TABLE system_prompt ADD COLUMN title VARCHAR(128) NOT NULL DEFAULT ''"
+                )
+            )
+            conn.commit()
+        except Exception:
+            pass  # column already exists
+
+
+_migrate()  # run at module-load time, before models are imported elsewhere
+
+
 def get_db() -> Session:
     """FastAPI dependency — yields a DB session, auto-closed on response."""
     db = SessionLocal()

@@ -384,11 +384,15 @@ def get_schemas() -> list[dict]:
 async def execute_tool(name: str, user_id: str = "default",
                        kb_scope: str = "personal",
                        db_scope: list[int] | None = None,
+                       default_category: str = "",
                        **kwargs) -> str:
     """Execute a tool function by name with given arguments.
 
     kb_scope / db_scope are forwarded to the individual tools so they can
     enforce the permissions configured by the admin in user management.
+
+    default_category is used for query_rag when the LLM doesn't specify a
+    category — typically set from the prompt template the user selected.
     """
     func = TOOL_FUNCTIONS.get(name)
     if func is None:
@@ -398,6 +402,8 @@ async def execute_tool(name: str, user_id: str = "default",
         if name == "query_rag":
             kwargs["user_id"] = user_id
             kwargs["kb_scope"] = kb_scope
+            if not kwargs.get("category") and default_category:
+                kwargs["category"] = default_category
         elif name in ("list_db_connections", "list_db_tables", "query_db"):
             kwargs["db_scope"] = db_scope
         result = await func(**kwargs)

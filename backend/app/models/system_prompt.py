@@ -1,8 +1,8 @@
 """
-System prompt model — stores the active AI system prompt in the database.
+System prompt model — stores prompt templates in the database.
 
-Admin users can update the prompt via the admin panel;
-the agent reads it at startup / on each request.
+Admin users can manage prompt templates via the admin panel.
+The "default" template is used as the active system prompt for the agent.
 """
 
 from __future__ import annotations
@@ -13,18 +13,22 @@ from sqlalchemy.sql import func
 
 
 class SystemPrompt(Base):
-    """Key-value style config store for system prompt."""
+    """Prompt template table — supports multiple named templates."""
 
     __tablename__ = "system_prompt"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     prompt_key = Column(
         String(64), unique=True, nullable=False, default="default",
-        comment="Config key — currently only 'default' is used"
+        comment="Unique key — 'default' is the active system prompt"
+    )
+    title = Column(
+        String(128), nullable=False, default="",
+        comment="Display title for the prompt template"
     )
     prompt_content = Column(
         Text, nullable=False,
-        comment="The actual system prompt text sent to the LLM"
+        comment="The actual prompt text sent to the LLM"
     )
     updated_at = Column(
         DateTime, server_default=func.now(), onupdate=func.now(),
@@ -34,5 +38,5 @@ class SystemPrompt(Base):
     def __repr__(self):
         return (
             f"<SystemPrompt(key='{self.prompt_key}', "
-            f"updated={self.updated_at})>"
+            f"title='{self.title}', updated={self.updated_at})>"
         )

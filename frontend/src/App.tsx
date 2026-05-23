@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom'
 import { Layout, ConfigProvider } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { ChatProvider, useChat } from './store/chatStore'
+import { ToastProvider } from './components/Toast'
 import type { ReactNode } from 'react'
 import type { UserInfo } from './types/chat'
 
@@ -96,7 +97,7 @@ function ChatLayout() {
               messages={chat.messages ?? []}
               isLoading={chat.isLoading ?? false}
               currentTool={chat.currentTool ?? null}
-              onSendChat={chat.sendChat}
+              onSendChat={(msg, _files, cat) => chat.sendChat(msg, cat)}
             />
           )}
         </Content>
@@ -124,6 +125,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <ConfigProvider locale={zhCN} theme={{ token: { colorPrimary: '#4F46E5', borderRadius: 10 } }}>
+        <ToastProvider>
         <ChatProvider>
           <Routes>
             <Route path="/" element={<LoginPageWrapper />} />
@@ -182,6 +184,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </ChatProvider>
+        </ToastProvider>
       </ConfigProvider>
     </BrowserRouter>
   )

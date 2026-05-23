@@ -285,7 +285,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
 interface ChatContextValue {
   state: ChatState
   dispatch: React.Dispatch<ChatAction>
-  sendChat: (message: string) => void
+  sendChat: (message: string, category?: string) => void
   newConversation: () => void
   switchConversation: (id: string | null) => void
   removeConversation: (id: string) => void
@@ -365,7 +365,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   // ---- Send chat (streaming) ----
   const sendChat = useCallback(
-    (message: string) => {
+    (message: string, category?: string) => {
       if (!message.trim() || state.isLoading) return
 
       // Ensure there's an active conversation
@@ -407,6 +407,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           conversation_id: convId,
           history: undefined, // backend handles history internally for now
           user_id: localStorage.getItem('lunjiao_user_id') || 'default',
+          category: category || undefined,
         },
         (eventType, data) => {
           switch (eventType) {

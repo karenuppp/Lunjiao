@@ -51,6 +51,7 @@ app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(db_connections.router, prefix="/api/db-connections", tags=["db-connections"])
 app.include_router(prompt.router, prefix="/api/prompt", tags=["prompt"])
+app.include_router(prompt.templates_router, prefix="/api/prompts", tags=["prompts"])
 
 # ── Production: serve built frontend when dist/ exists ──
 # Dev mode   → `npm run dev` (Vite on :5173 proxies /api to :8000)

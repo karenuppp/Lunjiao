@@ -1,19 +1,21 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import {
   Input, Button, Table, Modal, Tag, Empty,
-  Tooltip, message,
+  Tooltip, Select, Popconfirm,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { InputRef } from 'antd'
 import { useChat } from '../store/chatStore'
-import { listUploadedFiles, deleteUploadedFile } from '../api/chat'
-import type { UploadedFileMeta } from '../api/chat'
+import { useToast } from './Toast'
+import { listUploadedFiles, deleteUploadedFile, updateFileCategory, listPromptTemplates } from '../api/chat'
+import type { UploadedFileMeta, PromptTemplate } from '../api/chat'
 
 // Lucide icons
 import {
   UploadCloud, FileText, FileType, Table2,
   Presentation, Archive, Image as ImageIcon, Loader2, Search, RefreshCw,
   Trash2, XCircle, CheckCircle2, Inbox,
+  Check,
 } from 'lucide-react'
 
 // ============================================================
@@ -80,6 +82,7 @@ function UploadModalBody({ onDone }: { onDone: () => void }) {
     addPendingFiles, removePendingFile, clearPendingFiles,
     confirmUpload,
   } = useChat()
+  const toast = useToast()
 
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -101,11 +104,20 @@ function UploadModalBody({ onDone }: { onDone: () => void }) {
   const handleConfirmUpload = async () => {
     await confirmUpload()
     clearPendingFiles()
-    message.success('文件上传成功')
+    toast.success('上传成功')
     justCompletedRef.current = true
-    // Auto-close after a brief moment for the user to see completion
     setTimeout(() => onDone(), 600)
   }
+
+  // Detect archive extraction when upload progress updates
+  useEffect(() => {
+    if (!isUploading && uploadProgress.length > 0) {
+      const hasArchive = uploadProgress.some(p => p.archiveChildren && p.archiveChildren.length > 0)
+      if (hasArchive && uploadProgress.every(p => p.status === 'done' || p.status === 'error')) {
+        toast.success('解压成功')
+      }
+    }
+  }, [isUploading, uploadProgress, toast])
 
   const showProgress = isUploading || (uploadProgress.length > 0 && pendingFiles.length === 0)
 
@@ -256,6 +268,7 @@ function UploadModalBody({ onDone }: { onDone: () => void }) {
 // ============================================================
 
 export default function KbManagePage() {
+  const toast = useToast()
   const role = localStorage.getItem('lunjiao_role') || ''
   const isAdmin = role === 'admin'
   const userId = localStorage.getItem('lunjiao_user_id') || 'default'
@@ -271,7 +284,36 @@ export default function KbManagePage() {
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
 
+  // ── Tag / category state ──
+  const [templates, setTemplates] = useState<PromptTemplate[]>([])
+  const [pendingTags, setPendingTags] = useState<Record<string, string>>({})   // file_id → selected category
+  const [savingTags, setSavingTags] = useState<Record<string, boolean>>({})    // file_id → saving spinner
+
   const searchInputRef = useRef<InputRef>(null)
+
+  // Load prompt templates for tag options
+  useEffect(() => {
+    let cancelled = false
+    listPromptTemplates().then(data => { if (!cancelled) setTemplates(data) }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  const tagOptions = templates.map(t => ({ value: t.title, label: t.title }))
+
+  const handleSaveTag = async (fileId: string, category: string) => {
+    setSavingTags(prev => ({ ...prev, [fileId]: true }))
+    try {
+      await updateFileCategory(fileId, category)
+      // Update local file list
+      setFiles(prev => prev.map(f => f.file_id === fileId ? { ...f, category } : f))
+      setPendingTags(prev => { const n = { ...prev }; delete n[fileId]; return n })
+      toast.success('标签添加成功')
+    } catch {
+      toast.error('标签保存失败')
+    } finally {
+      setSavingTags(prev => { const n = { ...prev }; delete n[fileId]; return n })
+    }
+  }
 
   const renderFileIcon = (name: string) => {
     const meta = getFileTypeMeta(name)
@@ -285,12 +327,14 @@ export default function KbManagePage() {
       const all = await listUploadedFiles({ user_id: userId })
       setFiles(all)
       setSelectedRowKeys([])
+      toast.success('刷新成功')
     } catch {
       setError('加载文件列表失败')
+      toast.error('加载文件列表失败')
     } finally {
       setLoading(false)
     }
-  }, [userId])
+  }, [userId, toast])
 
   React.useEffect(() => { loadFiles() }, [loadFiles])
 
@@ -314,9 +358,9 @@ export default function KbManagePage() {
       await deleteUploadedFile(fileId, userId)
       setFiles(prev => prev.filter(f => f.file_id !== fileId))
       setSelectedRowKeys(prev => prev.filter(k => k !== fileId))
-      message.success('文件已删除')
+      toast.success('删除成功')
     } catch {
-      message.error('删除失败')
+      toast.error('删除失败')
     } finally {
       setDeletingId(null)
     }
@@ -342,9 +386,50 @@ export default function KbManagePage() {
           }
         }
         setSelectedRowKeys([])
-        if (successCount > 0) message.success(`成功删除 ${successCount} 个文件`)
+        if (successCount > 0) toast.success(`成功删除 ${successCount} 个文件`)
       },
     })
+  }
+
+  // Tag column — only visible when viewing public knowledge base
+  const tagColumn = {
+    title: '标签',
+    dataIndex: 'category',
+    key: 'category',
+    width: 200,
+    render: (_cat: string | undefined, record: UploadedFileMeta) => {
+      const currentCat = pendingTags[record.file_id] ?? record.category ?? ''
+      const isSaving = savingTags[record.file_id]
+      const hasChanged = currentCat !== (record.category ?? '') && currentCat !== ''
+      const displayValue = currentCat || undefined
+
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Select
+            value={displayValue}
+            placeholder="无"
+            size="small"
+            style={{ flex: 1, minWidth: 120 }}
+            options={tagOptions}
+            allowClear
+            onChange={(val) => {
+              setPendingTags(prev => ({ ...prev, [record.file_id]: val || '' }))
+            }}
+          />
+          {hasChanged && !isSaving && (
+            <Tooltip title="确认添加标签">
+              <Button
+                type="text"
+                size="small"
+                icon={<Check size={14} style={{ color: '#10B981' }} />}
+                onClick={() => handleSaveTag(record.file_id, currentCat)}
+              />
+            </Tooltip>
+          )}
+          {isSaving && <Loader2 size={14} className="progress-spinner" />}
+        </div>
+      )
+    },
   }
 
   const columns: ColumnsType<UploadedFileMeta> = [
@@ -352,7 +437,7 @@ export default function KbManagePage() {
       title: '文件名',
       dataIndex: 'file_name',
       key: 'file_name',
-      width: 260,
+      width: 220,
       render: (name: string) => (
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <span style={{ flexShrink: 0 }}>{renderFileIcon(name)}</span>
@@ -369,7 +454,7 @@ export default function KbManagePage() {
       title: '大小',
       dataIndex: 'file_size',
       key: 'file_size',
-      width: 100,
+      width: 90,
       render: (size: number) => <span style={{ color: '#6B7280', fontSize: 13 }}>{formatSize(size)}</span>,
       sorter: (a, b) => a.file_size - b.file_size,
     },
@@ -377,7 +462,7 @@ export default function KbManagePage() {
       title: '状态',
       dataIndex: 'rag_status',
       key: 'rag_status',
-      width: 110,
+      width: 100,
       render: (status: string) => {
         const cfg = RAG_STATUS_MAP[status] || { color: 'default', label: status }
         return <Tag color={cfg.color}>{cfg.label}</Tag>
@@ -393,16 +478,18 @@ export default function KbManagePage() {
       title: '上传时间',
       dataIndex: 'uploaded_at',
       key: 'uploaded_at',
-      width: 160,
+      width: 150,
       render: (time: string) => <span style={{ color: '#9CA3AF', fontSize: 12 }}>{formatTime(time)}</span>,
       sorter: (a, b) => new Date(a.uploaded_at).getTime() - new Date(b.uploaded_at).getTime(),
       defaultSortOrder: 'descend',
     },
+    // Tag column only for public KB view
+    ...(scope === 'public' ? [tagColumn] : []),
     {
       title: '来源',
       dataIndex: 'user_id',
       key: 'user_id',
-      width: 90,
+      width: 100,
       render: (uid: string) => (
         <Tag style={{ fontSize: 11 }} color={uid === 'default' ? 'blue' : 'default'}>
           {uid === 'default' ? '公用' : '个人'}
@@ -412,16 +499,22 @@ export default function KbManagePage() {
     {
       title: '操作',
       key: 'actions',
-      width: 80,
+      width: 100,
       render: (_: unknown, record: UploadedFileMeta) => (
-        <Tooltip title="删除">
+        <Popconfirm
+          title="确认删除"
+          description={`确定要删除「${record.file_name}」吗？此操作不可恢复。`}
+          onConfirm={() => handleDelete(record.file_id)}
+          okText="确认删除"
+          cancelText="取消"
+          okButtonProps={{ danger: true }}
+        >
           <Button
             type="text" size="small" danger
             icon={<Trash2 size={14} />}
             loading={deletingId === record.file_id}
-            onClick={() => handleDelete(record.file_id)}
           />
-        </Tooltip>
+        </Popconfirm>
       ),
     },
   ]

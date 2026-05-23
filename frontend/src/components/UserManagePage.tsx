@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Table, Input, Select, message, Modal, Button, Radio, Checkbox, Spin } from 'antd'
+import { Table, Input, Select, Modal, Button, Radio, Checkbox, Spin } from 'antd'
 import { PlusOutlined, DeleteOutlined, EditOutlined, SafetyOutlined } from '@ant-design/icons'
 import {
   listUsers,
@@ -11,6 +11,7 @@ import {
   getUserQueryPermission,
   setUserQueryPermission,
 } from '../api/chat'
+import { useToast } from './Toast'
 import type { UserRecord, DbConnectionRecord } from '../api/chat'
 
 /* ── knowledge base scope labels ── */
@@ -21,6 +22,7 @@ const KB_SCOPE_LABELS: Record<string, string> = {
 }
 
 export default function UserManagePage() {
+  const toast = useToast()
   const navigate = useNavigate()
 
   /* ── user list ── */
@@ -60,7 +62,7 @@ export default function UserManagePage() {
       const data = await listUsers()
       setUsers(data)
     } catch (err: any) {
-      message.error(err.message || '加载用户列表失败')
+      toast.error(err.message || '加载用户列表失败')
       if (err.message?.includes('无权限')) {
         navigate('/chat', { replace: true })
       }
@@ -76,24 +78,24 @@ export default function UserManagePage() {
   /* ── create user ── */
   const handleCreateUser = async () => {
     if (!newAccount.trim()) {
-      message.warning('请输入账号')
+      toast.error('请输入账号')
       return
     }
     if (!newPassword.trim()) {
-      message.warning('请输入密码')
+      toast.error('请输入密码')
       return
     }
 
     setSubmitting(true)
     try {
       await createUser(newAccount.trim(), newPassword.trim(), newRole)
-      message.success('用户创建成功')
+      toast.success('添加成功')
       setNewAccount('')
       setNewPassword('')
       setNewRole('user')
       fetchUsers()
     } catch (err: any) {
-      message.error(err.message || '创建失败')
+      toast.error(err.message || '创建失败')
     } finally {
       setSubmitting(false)
     }
@@ -110,11 +112,11 @@ export default function UserManagePage() {
     setDelSubmitting(true)
     try {
       await deleteUser(delUserId)
-      message.success('用户已删除')
+      toast.success('删除成功')
       setDelModalOpen(false)
       fetchUsers()
     } catch (err: any) {
-      message.error(err.message || '删除失败')
+      toast.error(err.message || '删除失败')
     } finally {
       setDelSubmitting(false)
     }
@@ -129,7 +131,7 @@ export default function UserManagePage() {
 
   const handleChangePassword = async () => {
     if (!cpNewPassword.trim()) {
-      message.warning('请输入新密码')
+      toast.error('请输入新密码')
       return
     }
     if (cpUserId === null) return
@@ -137,10 +139,10 @@ export default function UserManagePage() {
     setCpSubmitting(true)
     try {
       await changeUserPassword(cpUserId, cpNewPassword.trim())
-      message.success('密码修改成功')
+      toast.success('修改成功')
       setCpModalOpen(false)
     } catch (err: any) {
-      message.error(err.message || '修改密码失败')
+      toast.error(err.message || '修改密码失败')
     } finally {
       setCpSubmitting(false)
     }
@@ -164,7 +166,7 @@ export default function UserManagePage() {
       setPermDbScope(perm.db_scope || [])
       setDbConnections(conns)
     } catch (err: any) {
-      message.error(err.message || '加载权限信息失败')
+      toast.error(err.message || '加载权限信息失败')
     } finally {
       setDbLoading(false)
     }
@@ -178,11 +180,11 @@ export default function UserManagePage() {
         kb_scope: permKbScope,
         db_scope: permDbScope.length > 0 ? permDbScope : null,
       })
-      message.success('权限保存成功')
+      toast.success('修改成功')
       setPermModalOpen(false)
       fetchUsers() // refresh list to show updated scope
     } catch (err: any) {
-      message.error(err.message || '保存权限失败')
+      toast.error(err.message || '保存权限失败')
     } finally {
       setPermSubmitting(false)
     }
@@ -190,8 +192,8 @@ export default function UserManagePage() {
 
   /* ── columns ── */
   const columns = [
-    { title: 'ID', dataIndex: 'id', key: 'id', width: 80 },
-    { title: '账号', dataIndex: 'account', key: 'account', width: 140 },
+    { title: 'ID', dataIndex: 'id', key: 'id', width: 70 },
+    { title: '账号', dataIndex: 'account', key: 'account', width: 150 },
     {
       title: '角色', dataIndex: 'role', key: 'role', width: 100,
       render: (role: string) => (
@@ -204,11 +206,11 @@ export default function UserManagePage() {
       ),
     },
     {
-      title: '知识库范围', dataIndex: 'kb_scope', key: 'kb_scope', width: 130,
+      title: '知识库范围', dataIndex: 'kb_scope', key: 'kb_scope', width: 120,
       render: (scope: string) => KB_SCOPE_LABELS[scope] || scope,
     },
     {
-      title: '操作', key: 'action', width: 260,
+      title: '操作', key: 'action', width: 250,
       render: (_: any, record: UserRecord) => (
         <div style={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
           <Button
@@ -353,12 +355,12 @@ export default function UserManagePage() {
         onCancel={() => setDelModalOpen(false)}
         onOk={handleDeleteUser}
         confirmLoading={delSubmitting}
-        okText="确认"
+        okText="确认删除"
         cancelText="取消"
         okButtonProps={{ danger: true }}
       >
         <div style={{ margin: '12px 0', fontSize: 14 }}>
-          是否确认删除该用户？
+          确定要删除该用户吗？
           <div style={{ marginTop: 8, color: '#6b7280', fontSize: 13 }}>
             账号：{users.find(u => u.id === delUserId)?.account ?? ''}
           </div>
@@ -375,7 +377,7 @@ export default function UserManagePage() {
         onCancel={() => setPermModalOpen(false)}
         onOk={handleSavePermission}
         confirmLoading={permSubmitting}
-        okText="确认"
+        okText="确认修改"
         cancelText="取消"
         width={520}
       >

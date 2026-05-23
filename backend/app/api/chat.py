@@ -46,6 +46,7 @@ class ChatRequest(BaseModel):
     response_mode: Optional[str] = "all"  # "text" | "chart" | "all"
     history: Optional[List[Dict[str, str]]] = None
     user_id: Optional[str] = None  # User identifier for knowledge base isolation
+    category: Optional[str] = None  # Prompt template title — used as default RAG category
 
 
 class ChatResponse(BaseModel):
@@ -106,6 +107,7 @@ async def chat(request: ChatRequest):
         user_id=user_id,
         kb_scope=kb_scope,
         db_scope=db_scope,
+        default_category=request.category or "",
     )
 
     # Store conversation
@@ -159,6 +161,7 @@ async def chat_stream(request: ChatRequest):
             user_id=user_id,
             kb_scope=kb_scope,
             db_scope=db_scope,
+            default_category=request.category or "",
         ):
             yield event_line
 

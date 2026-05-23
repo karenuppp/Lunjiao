@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Table, Button, Modal, Input, InputNumber, Tag, Space, message, Popconfirm } from 'antd'
+import { Table, Button, Modal, Input, InputNumber, Tag, Space, Popconfirm } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
   PlusOutlined,
@@ -19,8 +19,10 @@ import {
   type DbFieldInfo,
   type TestConnectionResult,
 } from '../api/chat'
+import { useToast } from './Toast'
 
 export default function DbManagePage() {
+  const toast = useToast()
   const [connections, setConnections] = useState<DbConnectionRecord[]>([])
   const [loading, setLoading] = useState(false)
 
@@ -30,7 +32,7 @@ export default function DbManagePage() {
       const data = await listDbConnections()
       setConnections(data)
     } catch (err: any) {
-      message.error('加载连接列表失败: ' + err.message)
+      toast.error('加载连接列表失败: ' + err.message)
     } finally {
       setLoading(false)
     }
@@ -66,7 +68,7 @@ export default function DbManagePage() {
 
   const handleTest = async () => {
     if (!host || !port) {
-      message.warning('请填写数据库地址和端口')
+      toast.error('请填写数据库地址和端口')
       return
     }
     setTesting(true)
@@ -83,13 +85,13 @@ export default function DbManagePage() {
       })
       setTestResult(result)
       if (result.success) {
-        message.success('连接成功！')
+        toast.success('连接成功')
       } else {
-        message.error(result.message)
+        toast.error(result.message)
       }
     } catch (err: any) {
       setTestResult({ success: false, message: err.message, fields: [] })
-      message.error('测试连接失败: ' + err.message)
+      toast.error('测试连接失败: ' + err.message)
     } finally {
       setTesting(false)
     }
@@ -97,11 +99,11 @@ export default function DbManagePage() {
 
   const handleConfirmAdd = async () => {
     if (!connName || !host || !port || !tableName || !dbUser) {
-      message.warning('请填写所有必填字段')
+      toast.error('请填写所有必填字段')
       return
     }
     if (!testResult || !testResult.success) {
-      message.warning('请先点击「测试连接」并确保成功')
+      toast.error('请先点击「测试连接」并确保成功')
       return
     }
     setSubmitting(true)
@@ -115,12 +117,12 @@ export default function DbManagePage() {
         db_user: dbUser,
         db_password: dbPassword,
       })
-      message.success('数据库连接已添加')
+      toast.success('添加成功')
       setModalOpen(false)
       resetModal()
       fetchConnections()
     } catch (err: any) {
-      message.error('添加失败: ' + err.message)
+      toast.error('添加失败: ' + err.message)
     } finally {
       setSubmitting(false)
     }
@@ -129,10 +131,10 @@ export default function DbManagePage() {
   const handleDisconnect = async (id: number) => {
     try {
       await disconnectDbConnection(id)
-      message.info('已断开连接')
+      toast.success('断开成功')
       fetchConnections()
     } catch (err: any) {
-      message.error('断开失败: ' + err.message)
+      toast.error('断开失败: ' + err.message)
     }
   }
 
@@ -140,37 +142,37 @@ export default function DbManagePage() {
     try {
       const result = await connectDbConnection(id)
       if (result.status === 'connected') {
-        message.success('连接成功')
+        toast.success('连接成功')
       } else {
-        message.error(result.message)
+        toast.error(result.message)
       }
       fetchConnections()
     } catch (err: any) {
-      message.error('连接失败: ' + err.message)
+      toast.error('连接失败: ' + err.message)
     }
   }
 
   const handleDelete = async (id: number) => {
     try {
       await deleteDbConnection(id)
-      message.success('已删除')
+      toast.success('删除成功')
       fetchConnections()
     } catch (err: any) {
-      message.error('删除失败: ' + err.message)
+      toast.error('删除失败: ' + err.message)
     }
   }
 
   const columns: ColumnsType<DbConnectionRecord> = [
-    { title: '连接名称', dataIndex: 'name', key: 'name', width: 140 },
-    { title: '数据库地址', dataIndex: 'host', key: 'host', width: 150 },
-    { title: '端口', dataIndex: 'port', key: 'port', width: 70 },
-    { title: '数据库名', dataIndex: 'db_name', key: 'db_name', width: 120, render: (val: string | null) => val || '-' },
-    { title: '表名', dataIndex: 'table_name', key: 'table_name', width: 140 },
+    { title: '连接名称', dataIndex: 'name', key: 'name', width: 130 },
+    { title: '数据库地址', dataIndex: 'host', key: 'host', width: 140 },
+    { title: '端口', dataIndex: 'port', key: 'port', width: 80 },
+    { title: '数据库名', dataIndex: 'db_name', key: 'db_name', width: 110, render: (val: string | null) => val || '-' },
+    { title: '表名', dataIndex: 'table_name', key: 'table_name', width: 130 },
     {
       title: '连接状态',
       dataIndex: 'status',
       key: 'status',
-      width: 90,
+      width: 100,
       render: (val: string) =>
         val === 'connected' ? <Tag color="green">正常</Tag> : <Tag color="default">未连接</Tag>,
     },
@@ -197,7 +199,7 @@ export default function DbManagePage() {
               连接
             </Button>
           )}
-          <Popconfirm title="确定删除该连接？" onConfirm={() => handleDelete(record.id)}>
+          <Popconfirm title="确认删除" description={`确定要删除连接「${record.name}」吗？`} onConfirm={() => handleDelete(record.id)} okText="确认删除" cancelText="取消" okButtonProps={{ danger: true }}>
             <Button size="small" danger icon={<DeleteOutlined />}>
               删除
             </Button>
@@ -235,7 +237,7 @@ export default function DbManagePage() {
               setModalOpen(true)
             }}
           >
-            数据库连接
+            新增连接
           </Button>
         </div>
 

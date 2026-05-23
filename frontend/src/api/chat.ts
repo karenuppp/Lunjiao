@@ -152,6 +152,7 @@ export interface UploadedFileMeta {
   rag_status: 'indexed' | 'pending' | 'failed'
   rag_error?: string
   user_id?: string
+  category?: string
 }
 
 /** List files with optional scope filtering and keyword search. */
@@ -175,6 +176,17 @@ export async function listUploadedFiles(opts?: {
 export async function deleteUploadedFile(fileId: string, userId?: string): Promise<void> {
   const url = `${BASE_URL}/upload/files/${fileId}${userId ? `?user_id=${encodeURIComponent(userId)}` : ''}`
   const res = await fetch(url, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+}
+
+/** Update the category tag of an uploaded file. */
+export async function updateFileCategory(fileId: string, category: string): Promise<void> {
+  const formData = new FormData()
+  formData.append('category', category)
+  const res = await fetch(`${BASE_URL}/upload/files/${fileId}/category`, {
+    method: 'PUT',
+    body: formData,
+  })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
 }
 
@@ -433,6 +445,62 @@ export async function resetSystemPrompt(): Promise<{ ok: boolean; content: strin
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
+}
+
+// ============================================================
+// Prompt Template CRUD APIs
+// ============================================================
+
+export interface PromptTemplate {
+  id: number
+  prompt_key: string
+  title: string
+  content: string
+  updated_at: string | null
+}
+
+/** List all prompt templates. */
+export async function listPromptTemplates(): Promise<PromptTemplate[]> {
+  const res = await fetch(`${BASE_URL}/prompts`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+/** Create a new prompt template. */
+export async function createPromptTemplate(title: string, content: string): Promise<PromptTemplate> {
+  const res = await fetch(`${BASE_URL}/prompts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, content }),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as any).detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+/** Update an existing prompt template. */
+export async function updatePromptTemplate(id: number, payload: { title?: string; content?: string }): Promise<PromptTemplate> {
+  const res = await fetch(`${BASE_URL}/prompts/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as any).detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+/** Delete a prompt template. */
+export async function deletePromptTemplate(id: number): Promise<void> {
+  const res = await fetch(`${BASE_URL}/prompts/${id}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as any).detail || `HTTP ${res.status}`)
+  }
 }
 
 /** Set user query permission (admin only). */

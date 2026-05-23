@@ -37,6 +37,7 @@ export interface ChatRequest {
   response_mode?: 'text' | 'chart' | 'all'
   history?: Array<{ role: string; content: string }>
   user_id?: string
+  category?: string  // prompt template title — used as default RAG category
 }
 
 export interface ChatResponse {

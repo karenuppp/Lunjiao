@@ -1,125 +1,247 @@
-import { useState, useEffect } from 'react'
-import { Button, message, Spin } from 'antd'
-import { CheckOutlined, RollbackOutlined } from '@ant-design/icons'
-import { getSystemPrompt, updateSystemPrompt } from '../api/chat'
+import { useState, useEffect, useCallback } from 'react'
+import { Button, Input, Table, Popconfirm } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
+import { PlusOutlined, SaveOutlined, ClearOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import {
+  listPromptTemplates,
+  createPromptTemplate,
+  updatePromptTemplate,
+  deletePromptTemplate,
+  type PromptTemplate,
+} from '../api/chat'
+import { useToast } from './Toast'
 
 export default function PromptManagePage() {
+  const toast = useToast()
+  const [templates, setTemplates] = useState<PromptTemplate[]>([])
+  const [loading, setLoading] = useState(false)
+
+  // Form state
+  const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
-  const [savedContent, setSavedContent] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null) // null = adding mode
 
-  useEffect(() => {
-    loadPrompt()
-  }, [])
-
-  async function loadPrompt() {
+  const fetchTemplates = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await getSystemPrompt()
-      setContent(data.content)
-      setSavedContent(data.content)
-    } catch {
-      message.error('加载提示词失败，请检查后端服务')
+      const data = await listPromptTemplates()
+      setTemplates(data)
+    } catch (err: any) {
+      toast.error('加载提示词列表失败: ' + err.message)
     } finally {
       setLoading(false)
     }
+  }, [])
+
+  useEffect(() => {
+    fetchTemplates()
+  }, [fetchTemplates])
+
+  // True when user is editing an existing template (vs. creating a new one)
+  const isEditing = editingId !== null
+
+  function resetForm() {
+    setTitle('')
+    setContent('')
+    setEditingId(null)
   }
 
-  async function handleApply() {
-    if (!content.trim()) {
-      message.warning('提示词内容不能为空')
+  async function handleAdd() {
+    if (!title.trim()) {
+      toast.error('请输入标题')
       return
     }
-    setSaving(true)
+    if (!content.trim()) {
+      toast.error('请输入提示词内容')
+      return
+    }
     try {
-      await updateSystemPrompt(content)
-      setSavedContent(content)
-      message.success('提示词已应用')
+      await createPromptTemplate(title.trim(), content.trim())
+      toast.success('新增成功')
+      resetForm()
+      await fetchTemplates()
     } catch (err: any) {
-      message.error(err.message || '保存失败')
-    } finally {
-      setSaving(false)
+      toast.error('新增失败: ' + err.message)
     }
   }
 
-  function handleRestore() {
-    setContent(savedContent)
-    message.info('已还原到当前后端保存的提示词')
+  async function handleSave() {
+    if (editingId === null) return
+    if (!title.trim()) {
+      toast.error('请输入标题')
+      return
+    }
+    if (!content.trim()) {
+      toast.error('请输入提示词内容')
+      return
+    }
+    try {
+      await updatePromptTemplate(editingId, { title: title.trim(), content: content.trim() })
+      toast.success('修改成功')
+      resetForm()
+      await fetchTemplates()
+    } catch (err: any) {
+      toast.error('保存失败: ' + err.message)
+    }
   }
 
-  if (loading) {
-    return (
-      <div style={{ padding: 32, display: 'flex', justifyContent: 'center' }}>
-        <Spin size="large" />
-      </div>
-    )
+  function handleEdit(template: PromptTemplate) {
+    setTitle(template.title)
+    setContent(template.content)
+    setEditingId(template.id)
   }
 
-  const hasChanges = content !== savedContent
+  async function handleDelete(id: number) {
+    try {
+      await deletePromptTemplate(id)
+      toast.success('删除成功')
+      // If currently editing this template, reset the form
+      if (editingId === id) resetForm()
+      await fetchTemplates()
+    } catch (err: any) {
+      toast.error('删除失败: ' + err.message)
+    }
+  }
+
+  // ============================================================
+  // Table columns
+  // ============================================================
+
+  const columns: ColumnsType<PromptTemplate> = [
+    {
+      title: '标题',
+      dataIndex: 'title',
+      key: 'title',
+      width: 180,
+      render: (text: string) => (
+        <span style={{ fontWeight: 500 }}>{text}</span>
+      ),
+    },
+    {
+      title: '提示词',
+      dataIndex: 'content',
+      key: 'content',
+      render: (text: string) => {
+        const preview = text.length > 80 ? text.slice(0, 80) + '…' : text
+        return (
+          <span style={{ color: '#6b7280', fontSize: 13 }}>{preview}</span>
+        )
+      },
+    },
+    {
+      title: '操作',
+      key: 'actions',
+      width: 150,
+      render: (_: unknown, record: PromptTemplate) => (
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button
+            type="link"
+            size="small"
+            icon={<EditOutlined />}
+            onClick={() => handleEdit(record)}
+          >
+            修改
+          </Button>
+          <Popconfirm
+            title="确认删除"
+            description={record.prompt_key === 'default' ? '默认提示词不可删除' : `确定要删除提示词「${record.title}」吗？`}
+            onConfirm={() => handleDelete(record.id)}
+            okText="确认删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+            disabled={record.prompt_key === 'default'}
+          >
+            <Button
+              type="link"
+              size="small"
+              danger
+              icon={<DeleteOutlined />}
+              disabled={record.prompt_key === 'default'}
+            >
+              删除
+            </Button>
+          </Popconfirm>
+        </div>
+      ),
+    },
+  ]
 
   return (
-    <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>
-      <div className="page-card" style={{ padding: 32 }}>
-        <h2 className="page-card-heading">提示词管理</h2>
+    <div style={{ padding: 24, height: '100%', overflow: 'auto' }}>
+      {/* ── Editor card ── */}
+      <div className="page-card">
+        <h2 className="page-card-heading">
+          {isEditing ? '修改提示词模板' : '新增提示词模板'}
+        </h2>
 
-        <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 24 }}>
-          编辑 AI 智能问答的系统提示词（System Prompt）。修改后点击「应用」保存到后端，
-          或点击「还原」恢复到后端当前版本。
-        </p>
-
-        <textarea
-          value={content}
-          onChange={(e) => setContent(e.target.value)}
-          style={{
-            width: '100%',
-            minHeight: 360,
-            padding: 16,
-            fontSize: 14,
-            fontFamily: 'var(--font-mono)',
-            lineHeight: 1.7,
-            border: '1px solid var(--border-default)',
-            borderRadius: 'var(--radius-md)',
-            resize: 'vertical',
-            outline: 'none',
-            background: '#FAFBFC',
-            color: 'var(--text-primary)',
-            transition: 'border-color 0.2s ease, box-shadow 0.2s ease',
-          }}
-          onFocus={(e) => {
-            e.currentTarget.style.borderColor = 'var(--color-primary)'
-            e.currentTarget.style.boxShadow = '0 0 0 3px rgba(79, 70, 229, 0.1)'
-          }}
-          onBlur={(e) => {
-            e.currentTarget.style.borderColor = 'var(--border-default)'
-            e.currentTarget.style.boxShadow = 'none'
-          }}
-          placeholder="请输入系统提示词..."
-        />
-
-        <div style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          gap: 12,
-          marginTop: 20,
-        }}>
-          <Button
-            icon={<RollbackOutlined />}
-            onClick={handleRestore}
-            disabled={!hasChanges}
-          >
-            还原
-          </Button>
-          <Button
-            type="primary"
-            icon={<CheckOutlined />}
-            onClick={handleApply}
-            loading={saving}
-            disabled={!hasChanges}
-          >
-            应用
-          </Button>
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 500, color: '#374151' }}>
+            标题
+          </div>
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="请输入提示词标题"
+            style={{ maxWidth: 480 }}
+          />
         </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ marginBottom: 8, fontSize: 13, fontWeight: 500, color: '#374151' }}>
+            System Prompt
+          </div>
+          <Input.TextArea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="请输入系统提示词内容..."
+            rows={8}
+            style={{
+              fontFamily: 'var(--font-mono)',
+              fontSize: 13,
+              lineHeight: 1.6,
+            }}
+          />
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+          <Button
+            icon={<ClearOutlined />}
+            onClick={resetForm}
+          >
+            清除
+          </Button>
+          {isEditing ? (
+            <Button
+              type="primary"
+              icon={<SaveOutlined />}
+              onClick={handleSave}
+            >
+              保存
+            </Button>
+          ) : (
+            <Button
+              type="primary"
+              icon={<PlusOutlined />}
+              onClick={handleAdd}
+            >
+              新增
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* ── Template list card ── */}
+      <div className="page-card">
+        <h2 className="page-card-heading">提示词模板列表</h2>
+        <Table
+          columns={columns}
+          dataSource={templates}
+          rowKey="id"
+          loading={loading}
+          pagination={false}
+          locale={{ emptyText: '暂无提示词模板' }}
+          size="middle"
+        />
       </div>
     </div>
   )

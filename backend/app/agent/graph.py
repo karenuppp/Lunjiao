@@ -95,6 +95,7 @@ async def _run_react_loop(
     user_id: str = "default",
     kb_scope: str = "personal",
     db_scope: list[int] | None = None,
+    default_category: str = "",
 ) -> tuple[str, list[str]]:
     """Run a manual ReAct loop using OpenAI tool-calling.
 
@@ -141,7 +142,8 @@ async def _run_react_loop(
 
             result = await execute_tool(
                 func_name, user_id=user_id,
-                kb_scope=kb_scope, db_scope=db_scope, **args,
+                kb_scope=kb_scope, db_scope=db_scope,
+                default_category=default_category, **args,
             )
 
             # Append assistant message with tool call
@@ -181,6 +183,7 @@ async def run_agent_sync(
     user_id: str = "default",
     kb_scope: str = "personal",
     db_scope: list[int] | None = None,
+    default_category: str = "",
 ) -> dict:
     """Run the agent synchronously and return structured result."""
     import asyncio
@@ -189,6 +192,7 @@ async def run_agent_sync(
         messages = _build_messages(question, history)
         answer, data_sources_used = await _run_react_loop(
             messages, user_id=user_id, kb_scope=kb_scope, db_scope=db_scope,
+            default_category=default_category,
         )
         return {
             "answer": answer,
@@ -213,6 +217,7 @@ async def run_agent_stream_simple(
     user_id: str = "default",
     kb_scope: str = "personal",
     db_scope: list[int] | None = None,
+    default_category: str = "",
 ) -> AsyncIterator[str]:
     """Run the agent with SSE streaming output.
 
@@ -322,7 +327,8 @@ async def run_agent_stream_simple(
 
                 result = await execute_tool(
                     func_name, user_id=user_id,
-                    kb_scope=kb_scope, db_scope=db_scope, **args,
+                    kb_scope=kb_scope, db_scope=db_scope,
+                    default_category=default_category, **args,
                 )
 
                 yield format_sse_event("tool_call_end", {
