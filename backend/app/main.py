@@ -1,6 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 import os
 from app.api import chat, data_sources, history, upload, auth, db_connections, prompt, experience, opinion
 from app.database import init_db
@@ -55,8 +56,19 @@ app.include_router(experience.router, prefix="/api/experiences", tags=["experien
 app.include_router(opinion.router, prefix="/api", tags=["opinion"])
 
 # ── Production: serve built frontend when dist/ exists ──
-# Dev mode   → `npm run dev` (Vite on :5173 proxies /api to :8000)
-# Production → `npm run build` then uvicorn (FastAPI serves dist/)
 dist_dir = Path(__file__).parent.parent.parent / "frontend" / "dist"
 if dist_dir.exists():
-    app.mount("/", StaticFiles(directory=str(dist_dir), html=True), name="frontend")
+    app.mount("/assets", StaticFiles(directory=str(dist_dir / "assets")), name="assets")
+
+    index_html = dist_dir / "index.html"
+
+    @app.get("/")
+    async def serve_root():
+        return FileResponse(index_html)
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        file_path = dist_dir / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        return FileResponse(index_html)

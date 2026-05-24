@@ -196,6 +196,7 @@ docker load -i zhiwei-new.tar
 | `DB_PASSWORD` | 123456 | MySQL 密码 |
 | `DB_NAME` | zhiwei | MySQL 数据库名 |
 | `UPLOAD_DIR` | /app/uploads | 上传文件目录 |
+| `PORT` | 8000 | 应用监听端口 |
 | `MAX_UPLOAD_SIZE_MB` | 50 | 上传文件大小限制 |
 | `RAG_CHUNK_TOP_K` | 5 | RAG 返回片段数 |
 | `RAG_COSINE_THRESHOLD` | 0.3 | 向量相似度阈值 |

@@ -21,7 +21,7 @@ Base = declarative_base()
 
 
 def _migrate():
-    """Run schema migrations before any ORM queries touch the database."""
+    """Run schema migrations (call AFTER init_db creates tables)."""
     import sqlalchemy as sa
     with engine.connect() as conn:
         migrations = [
@@ -34,9 +34,6 @@ def _migrate():
                 conn.commit()
             except Exception:
                 pass  # column already exists
-
-
-_migrate()  # run at module-load time, before models are imported elsewhere
 
 
 def get_db() -> Session:
@@ -53,3 +50,4 @@ def init_db():
     import app.models.system_prompt  # noqa: ensure model is registered
     import app.models.experience  # noqa: ensure model is registered
     Base.metadata.create_all(bind=engine)
+    _migrate()

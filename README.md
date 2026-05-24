@@ -121,6 +121,7 @@ docker run -d --name zhiwei --network host \
 | `EMBEDDING_BASE_URL` | (回退到 OPENAI_BASE_URL) | Embedding API 地址 |
 | `EMBEDDING_MODEL` | `text-embedding-nomic-embed-text-v1.5` | Embedding 模型 |
 | `EMBEDDING_DIM` | `768` | Embedding 维度 |
+| `PORT` | `8000` | 应用监听端口 |
 
 ### 离线服务器完整部署步骤
 

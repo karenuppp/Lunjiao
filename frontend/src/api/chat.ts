@@ -1,6 +1,6 @@
 import type { ChatRequest, ChatResponse, Conversation, DataSource } from '../types/chat'
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
 
 export async function loginUser(account: string, password: string): Promise<{
   ok: boolean

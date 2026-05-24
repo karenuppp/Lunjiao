@@ -42,6 +42,8 @@ class Settings:
     experience_cosine_threshold: float = float(os.getenv("EXPERIENCE_COSINE_THRESHOLD", "0.5"))
     experience_dedup_threshold: float = float(os.getenv("EXPERIENCE_DEDUP_THRESHOLD", "0.85"))
 
+    port: int = int(os.getenv("PORT", "8000"))
+
     upload_dir: str = os.getenv("UPLOAD_DIR", str(Path(__file__).parent.parent / "uploads"))
     max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "50"))
     allowed_extensions: list[str] = os.getenv(
