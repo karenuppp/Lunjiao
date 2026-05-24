@@ -16,7 +16,7 @@ DB_HOST = os.getenv("DB_HOST", "localhost")
 DB_PORT = os.getenv("DB_PORT", "3306")
 DB_USER = os.getenv("DB_USER", "root")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-DB_NAME = os.getenv("DB_NAME", "lunjiao")
+DB_NAME = os.getenv("DB_NAME", "zhiwei")
 
 DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?charset=utf8mb4"
 
@@ -26,7 +26,7 @@ def get_engine():
 
 
 def main():
-    parser = argparse.ArgumentParser(description="初始化 Lunjiao 用户表")
+    parser = argparse.ArgumentParser(description="初始化 Zhiwei 用户表")
     parser.add_argument("--account", default="193699", help="测试账号 (默认: 193699)")
     parser.add_argument("--password", default="193699", help="测试密码 (默认: 193699)")
     parser.add_argument("--role", default="admin", help="角色 (默认: admin)")

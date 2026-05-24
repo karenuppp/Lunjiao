@@ -285,7 +285,7 @@ async def _process_single_file(
                          and not any(e.endswith(ae) for ae in ARCHIVE_EXTENSIONS)]
 
         extracted_files: list[dict] = []
-        temp_dir = tempfile.mkdtemp(prefix="lunjiao_archive_")
+        temp_dir = tempfile.mkdtemp(prefix="zhiwei_archive_")
         try:
             extracted_paths = _extract_archive(str(save_path), temp_dir)
         except RuntimeError as e:

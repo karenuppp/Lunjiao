@@ -6,15 +6,20 @@ load_dotenv()
 
 
 class Settings:
+    # ── LLM 配置 ──
     openai_api_key: str = os.getenv("OPENAI_API_KEY", "lm-studio")
     openai_base_url: str = os.getenv("OPENAI_BASE_URL", "http://localhost:1234/v1")
     model_name: str = os.getenv("MODEL_NAME", "qwen3.6-35B-A3B-apex")
+
+    # ── Embedding 配置（可独立于 LLM）──
+    embedding_api_key: str = os.getenv("EMBEDDING_API_KEY", os.getenv("OPENAI_API_KEY", "lm-studio"))
+    embedding_base_url: str = os.getenv("EMBEDDING_BASE_URL", os.getenv("OPENAI_BASE_URL", "http://localhost:1234/v1"))
 
     db_host: str = os.getenv("DB_HOST", "localhost")
     db_port: str = os.getenv("DB_PORT", "3306")
     db_user: str = os.getenv("DB_USER", "root")
     db_password: str = os.getenv("DB_PASSWORD", "123456")
-    db_name: str = os.getenv("DB_NAME", "lunjiao")
+    db_name: str = os.getenv("DB_NAME", "zhiwei")
 
     @property
     def database_url(self) -> str:

@@ -59,7 +59,7 @@ function getFileTypeMeta(filename: string) {
 
 export default function ChatPanel({
   messages, isLoading, currentTool,
-  onSendChat,
+  onSendChat, onFeedback,
 }: ChatPanelProps) {
   const [input, setInput] = useState('')
   const [contextFiles, setContextFiles] = useState<ContextFile[]>([])

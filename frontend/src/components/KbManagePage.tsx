@@ -253,9 +253,9 @@ function UploadModalBody({ onDone }: { onDone: () => void }) {
 
 export default function KbManagePage() {
   const toast = useToast()
-  const role = localStorage.getItem('lunjiao_role') || ''
+  const role = localStorage.getItem('zhiwei_role') || ''
   const isAdmin = role === 'admin'
-  const userId = localStorage.getItem('lunjiao_user_id') || 'default'
+  const userId = localStorage.getItem('zhiwei_user_id') || 'default'
 
   const [searchKeyword, setSearchKeyword] = useState('')
   const [scope, setScope] = useState<'all' | 'public' | 'personal'>('personal')
@@ -530,7 +530,7 @@ export default function KbManagePage() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Button size="middle" icon={<RefreshCw size={14} />} onClick={loadFiles} loading={loading}>
+            <Button size="middle" icon={<RefreshCw size={14} />} onClick={() => loadFiles()} loading={loading}>
               刷新
             </Button>
 

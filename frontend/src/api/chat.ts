@@ -319,7 +319,7 @@ export interface QueryPermission {
 }
 
 export async function listUsers(): Promise<UserRecord[]> {
-  const userId = localStorage.getItem('lunjiao_user_id') || ''
+  const userId = localStorage.getItem('zhiwei_user_id') || ''
   const res = await fetch(`${BASE_URL}/auth/users?user_id=${encodeURIComponent(userId)}`)
   if (res.status === 403) throw new Error('无权限访问')
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -327,7 +327,7 @@ export async function listUsers(): Promise<UserRecord[]> {
 }
 
 export async function createUser(account: string, password: string, role: string): Promise<void> {
-  const userId = localStorage.getItem('lunjiao_user_id') || ''
+  const userId = localStorage.getItem('zhiwei_user_id') || ''
   const res = await fetch(`${BASE_URL}/auth/users?user_id=${encodeURIComponent(userId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -340,13 +340,13 @@ export async function createUser(account: string, password: string, role: string
 }
 
 export async function deleteUser(userId: number): Promise<void> {
-  const callerId = localStorage.getItem('lunjiao_user_id') || ''
+  const callerId = localStorage.getItem('zhiwei_user_id') || ''
   const res = await fetch(`${BASE_URL}/auth/users/${userId}?caller_id=${encodeURIComponent(callerId)}`, { method: 'DELETE' })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
 }
 
 export async function changeUserPassword(userId: number, newPassword: string): Promise<void> {
-  const callerId = localStorage.getItem('lunjiao_user_id') || ''
+  const callerId = localStorage.getItem('zhiwei_user_id') || ''
   const res = await fetch(`${BASE_URL}/auth/users/${userId}/change-password?caller_id=${encodeURIComponent(callerId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -359,7 +359,7 @@ export async function changeUserPassword(userId: number, newPassword: string): P
 }
 
 export async function getUserQueryPermission(userId: number): Promise<QueryPermission> {
-  const callerId = localStorage.getItem('lunjiao_user_id') || ''
+  const callerId = localStorage.getItem('zhiwei_user_id') || ''
   const res = await fetch(
     `${BASE_URL}/auth/users/${userId}/query-permission?caller_id=${encodeURIComponent(callerId)}`,
   )
@@ -461,7 +461,7 @@ export async function sendFeedback(
       conversation_id: conversationId,
       message_id: messageId,
       rating,
-      user_id: userId || localStorage.getItem('lunjiao_user_id') || 'default',
+      user_id: userId || localStorage.getItem('zhiwei_user_id') || 'default',
     }),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -530,7 +530,7 @@ export async function setUserQueryPermission(
   userId: number,
   payload: QueryPermission,
 ): Promise<void> {
-  const callerId = localStorage.getItem('lunjiao_user_id') || ''
+  const callerId = localStorage.getItem('zhiwei_user_id') || ''
   const res = await fetch(
     `${BASE_URL}/auth/users/${userId}/query-permission?caller_id=${encodeURIComponent(callerId)}`,
     {

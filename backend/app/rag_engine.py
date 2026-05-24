@@ -39,7 +39,8 @@ def _create_embedding_func():
     import numpy as np
     import httpx
     from lightrag.utils import wrap_embedding_func_with_attrs
-    base_url = settings.openai_base_url.rstrip("/").replace("/v1", "")
+    base_url = settings.embedding_base_url.rstrip("/").replace("/v1", "")
+    api_key = settings.embedding_api_key
 
     embedding_dim_val = settings.embedding_dim
     embedding_model_val = settings.embedding_model
@@ -49,8 +50,11 @@ def _create_embedding_func():
         if isinstance(texts, str):
             texts = [texts]
         data = {"model": embedding_model_val, "input": texts}
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(f"{base_url}/v1/embeddings", json=data)
+            resp = await client.post(
+                f"{base_url}/v1/embeddings", json=data, headers=headers,
+            )
             if resp.status_code != 200:
                 raise RuntimeError(
                     f"Embedding API error {resp.status_code}: {resp.text[:200]}"

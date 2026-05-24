@@ -7,7 +7,7 @@ from app.database import init_db
 from pathlib import Path
 
 app = FastAPI(
-    title="Lunjiao - 部门智能问答系统",
+    title="Zhiwei - 部门智能问答系统",
     version="0.1.0",
     description="面向部门级的全能问答系统，支持自然语言查数据、做分析、出报告/图表",
 )

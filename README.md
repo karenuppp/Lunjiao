@@ -1,4 +1,4 @@
-# Lunjiao — 部门智能问答系统
+# Zhiwei — 部门智能问答系统
 
 面向部门级的自然语言数据查询与分析工具。用户用中文提问，系统自动检索知识库文档和数据库，生成回答。
 
@@ -37,7 +37,7 @@
 
 - Python 3.11+, Node.js 22+
 - 本地 LLM 服务（OpenAI-compatible API，默认 `localhost:1234/v1`）
-- MySQL（默认 `localhost:3306`，库名 `lunjiao`）
+- MySQL（默认 `localhost:3306`，库名 `zhiwei`）
 
 ### 启动
 
@@ -65,17 +65,17 @@ npm run dev  # http://localhost:5173
 
 ```bash
 # 在项目根目录
-docker build -t lunjiao:latest .
+docker build -t zhiwei:latest .
 ```
 
 ### 导出 / 导入
 
 ```bash
 # 导出为 tar（传输到离线服务器）
-docker save lunjiao:latest | gzip > lunjiao.tar.gz
+docker save zhiwei:latest | gzip > zhiwei.tar.gz
 
 # 在离线服务器上导入
-docker load < lunjiao.tar.gz
+docker load < zhiwei.tar.gz
 ```
 
 ### 运行
@@ -91,13 +91,13 @@ docker load < lunjiao.tar.gz
 
 ```bash
 # 基本启动（全部使用默认值，适合本地模型在同一台机器上）
-docker run -d --name lunjiao --network host lunjiao:latest
+docker run -d --name zhiwei --network host zhiwei:latest
 
 # 指定 LLM 地址
-docker run -d --name lunjiao --network host \
+docker run -d --name zhiwei --network host \
   -e OPENAI_BASE_URL=http://192.168.1.100:1234/v1 \
   -e MODEL_NAME=qwen3.6-27B \
-  lunjiao:latest
+  zhiwei:latest
 ```
 
 访问 `http://<服务器IP>:8000`。
@@ -113,10 +113,12 @@ docker run -d --name lunjiao --network host \
 | `DB_PORT` | `3306` | MySQL 端口 |
 | `DB_USER` | `root` | 数据库用户名 |
 | `DB_PASSWORD` | `123456` | 数据库密码 |
-| `DB_NAME` | `lunjiao` | 数据库名 |
+| `DB_NAME` | `zhiwei` | 数据库名 |
 | `RAG_API_BASE` | `http://localhost:8023` | RAG 服务地址 |
 | `RAG_API_KEY` | (内置) | RAG API Key |
 | `MCP_SERVER_BASE` | `http://localhost:8024` | MCP DB 服务地址 |
+| `EMBEDDING_API_KEY` | (回退到 OPENAI_API_KEY) | Embedding API Key |
+| `EMBEDDING_BASE_URL` | (回退到 OPENAI_BASE_URL) | Embedding API 地址 |
 | `EMBEDDING_MODEL` | `text-embedding-nomic-embed-text-v1.5` | Embedding 模型 |
 | `EMBEDDING_DIM` | `768` | Embedding 维度 |
 
@@ -126,15 +128,15 @@ docker run -d --name lunjiao --network host \
 
 ```bash
 # 1. 导入镜像
-docker load < lunjiao.tar.gz
+docker load < zhiwei.tar.gz
 
 # 2. 启动（根据实际模型和数据库地址调整）
-docker run -d --name lunjiao --restart unless-stopped --network host \
+docker run -d --name zhiwei --restart unless-stopped --network host \
   -e OPENAI_BASE_URL=http://localhost:1234/v1 \
   -e MODEL_NAME=your-model-name \
   -e DB_HOST=localhost \
-  -e DB_NAME=lunjiao \
-  lunjiao:latest
+  -e DB_NAME=zhiwei \
+  zhiwei:latest
 
 # 3. 验证
 curl http://localhost:8000/api/health
@@ -162,7 +164,7 @@ curl http://localhost:8000/api/health
 ## 项目结构
 
 ```
-Lunjiao/
+Zhiwei/
 ├── frontend/                  # React 应用 (Vite)
 │   ├── src/
 │   │   ├── api/chat.ts        # API 客户端

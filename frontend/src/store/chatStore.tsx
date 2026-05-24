@@ -10,7 +10,7 @@ import {
 import type { DataCategory, PendingFile, UploadProgressItem, AppView, UserInfo, Message as ChatMessage } from '../types/chat'
 import { sendChatStream, isArchiveFile, uploadFilesBatchWithUser, loginUser, sendFeedback } from '../api/chat'
 
-const STORAGE_KEY = 'lunjiao_conversations'
+const STORAGE_KEY = 'zhiwei_conversations'
 
 function saveToStorage(state: ChatState) {
   try {
@@ -412,7 +412,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           message,
           conversation_id: convId,
           history: undefined,
-          user_id: localStorage.getItem('lunjiao_user_id') || 'default',
+          user_id: localStorage.getItem('zhiwei_user_id') || 'default',
           category: category || undefined,
         },
         (eventType, data) => {
@@ -482,7 +482,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const uploadFile = useCallback(async (file: File, userId?: string): Promise<UploadedFileMeta | null> => {
     const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
-    const currentUserId = userId || localStorage.getItem('lunjiao_user_id') || 'default'
+    const currentUserId = userId || localStorage.getItem('zhiwei_user_id') || 'default'
     const formData = new FormData()
     formData.append('file', file)
     formData.append('user_id', currentUserId)
@@ -515,7 +515,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const removeUploadedFile = useCallback(async (fileId: string, userId?: string) => {
     const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
-    const currentUserId = userId || localStorage.getItem('lunjiao_user_id') || 'default'
+    const currentUserId = userId || localStorage.getItem('zhiwei_user_id') || 'default'
     try {
       await fetch(`${BASE_URL}/upload/files/${fileId}?user_id=${encodeURIComponent(currentUserId)}`, { method: 'DELETE' })
     } catch {}
@@ -554,7 +554,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const pending = persistedRef.current.pendingFiles
     if (pending.length === 0) return
 
-    const userId = localStorage.getItem('lunjiao_user_id') || 'default'
+    const userId = localStorage.getItem('zhiwei_user_id') || 'default'
 
     const progress = pending.map<UploadProgressItem>((pf) => ({
       uid: pf.uid,
@@ -625,8 +625,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
-    localStorage.removeItem('lunjiao_user_id')
-    localStorage.removeItem('lunjiao_role')
+    localStorage.removeItem('zhiwei_user_id')
+    localStorage.removeItem('zhiwei_role')
     if (abortRef.current) abortRef.current()
     dispatch({ type: 'LOGOUT' })
   }, [])
@@ -638,8 +638,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
     const userId = res.user_id || account
     const role = res.role || 'user'
-    localStorage.setItem('lunjiao_user_id', userId)
-    localStorage.setItem('lunjiao_role', role)
+    localStorage.setItem('zhiwei_user_id', userId)
+    localStorage.setItem('zhiwei_role', role)
     dispatch({ type: 'LOGIN', payload: { userId, role } })
     return { user_id: userId, role: role as 'admin' | 'user' }
   }, [])
