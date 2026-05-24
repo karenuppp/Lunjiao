@@ -383,9 +383,11 @@ export default function KbManagePage() {
     key: 'category',
     width: 200,
     render: (_cat: string | undefined, record: UploadedFileMeta) => {
-      const currentCat = pendingTags[record.file_id] ?? record.category ?? ''
+      const rawCat = record.category ?? ''
+      const effectiveCat = rawCat === '上传文件' ? '' : rawCat
+      const currentCat = pendingTags[record.file_id] ?? effectiveCat
       const isSaving = savingTags[record.file_id]
-      const hasChanged = currentCat !== (record.category ?? '') && currentCat !== ''
+      const hasChanged = currentCat !== effectiveCat && currentCat !== ''
       const displayValue = currentCat || undefined
 
       return (

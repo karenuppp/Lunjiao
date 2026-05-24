@@ -83,6 +83,8 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
             else:
                 original_name = fpath.name
         category = meta.get("category", "")
+        if category == "上传文件":
+            category = ""
         uploaded_at = meta.get("uploaded_at",
                                datetime.fromtimestamp(fpath.stat().st_mtime).isoformat())
         file_user_id = meta.get("user_id", "default")
@@ -496,7 +498,8 @@ async def update_file_category(file_id: str, category: str = Form(...)):
     try:
         with open(meta_path, "r", encoding="utf-8") as f:
             meta = json.load(f)
-        meta["category"] = category
+        normalized = "" if category == "上传文件" else category
+        meta["category"] = normalized
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False)
     except Exception as e:

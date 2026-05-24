@@ -10,6 +10,8 @@ from app.rag_engine import rag
 from app.models.db_connection import DbConnection
 from app.services import db_service
 from app.services import experience_service
+from pathlib import Path
+import os
 
 
 async def query_rag(query_text: str, category: str = "", top_k: int = 5,
@@ -218,6 +220,95 @@ async def query_db(sql_query: str, connection_id: int,
         db.close()
 
 
+async def find_file_by_name(keyword: str, user_id: str = "default") -> str:
+    """Search uploaded files by name keyword, returning file content directly.
+
+    Unlike RAG-based search, this tool bypasses vector search and reads
+    the actual file contents. Use this when the prompt template explicitly
+    specifies a particular file to look up (e.g., "if the user mentions
+    turnover, look for 离职报告.pdf").
+
+    The keyword is matched against file names case-insensitively as a
+    substring search. The first matching file's content is returned.
+    """
+    from app.database import SessionLocal
+    from app.models.user import User
+
+    upload_dir = Path(settings.upload_dir)
+    if not upload_dir.exists():
+        return "未找到上传目录。"
+
+    matches = []
+    kw = keyword.lower().strip()
+    for fpath in upload_dir.iterdir():
+        if not fpath.is_file() or fpath.suffix == ".meta" or fpath.name.startswith("."):
+            continue
+        if kw in fpath.name.lower():
+            original_name = fpath.name
+            meta_path = upload_dir / f"{fpath.stem.rsplit('_', 1)[0] if '_' in fpath.stem else fpath.stem}.meta"
+            if meta_path.exists():
+                try:
+                    with open(meta_path, "r", encoding="utf-8") as f:
+                        meta = json.load(f)
+                    original_name = meta.get("original_name", fpath.name)
+                except Exception:
+                    pass
+            matches.append((fpath, original_name))
+
+    if not matches:
+        return f"未找到名称包含「{keyword}」的文件。"
+
+    fpath, original_name = matches[0]
+
+    try:
+        ext = fpath.suffix.lower()
+        if ext in (".txt", ".md", ".csv"):
+            with open(fpath, "r", encoding="utf-8") as f:
+                content = f.read()
+        elif ext in (".xlsx", ".xls"):
+            import openpyxl
+            wb = openpyxl.load_workbook(str(fpath), data_only=True)
+            lines = []
+            for sheet_name in wb.sheetnames:
+                ws = wb[sheet_name]
+                lines.append(f"=== Sheet: {sheet_name} ===")
+                for row in ws.iter_rows(values_only=True):
+                    row_str = " | ".join(str(cell) if cell is not None else "" for cell in row)
+                    if row_str.strip():
+                        lines.append(row_str)
+            content = "\n".join(lines)
+            wb.close()
+        elif ext == ".pdf":
+            try:
+                import pymupdf
+                doc = pymupdf.open(str(fpath))
+                pages = [page.get_text() for page in doc]
+                content = "\n\n".join(pages)
+                doc.close()
+            except ImportError:
+                return f"PDF 文件需安装 pymupdf 库才能读取：{original_name}"
+        elif ext in (".docx", ".doc"):
+            try:
+                import docx
+                doc = docx.Document(str(fpath))
+                content = "\n".join(p.text for p in doc.paragraphs)
+            except ImportError:
+                return f"Word 文件需安装 python-docx 库才能读取：{original_name}"
+        else:
+            return f"暂不支持的文件类型：{ext}（{original_name}）"
+
+        if not content or not content.strip():
+            return f"文件「{original_name}」内容为空。"
+
+        return (
+            f"**文件：{original_name}**\n\n"
+            f"{content[:3000]}"
+            + (f"\n\n*(内容过长，已截断至前 3000 字符)*" if len(content) > 3000 else "")
+        )
+    except Exception as e:
+        return f"读取文件「{original_name}」时出错：{str(e)}"
+
+
 async def query_experience(query_text: str, top_k: int = 3,
                            user_id: str = "default") -> str:
     results = await experience_service.search_relevant(
@@ -240,6 +331,7 @@ TOOL_FUNCTIONS: dict[str, callable] = {
     "list_db_tables": list_db_tables,
     "query_db": query_db,
     "query_experience": query_experience,
+    "find_file_by_name": find_file_by_name,
 }
 
 TOOL_SCHEMAS: list[dict] = [
@@ -262,6 +354,23 @@ TOOL_SCHEMAS: list[dict] = [
                     }
                 },
                 "required": ["query_text"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_file_by_name",
+            "description": "Search for a specific file by name keyword and return its full content. Use this when the prompt template explicitly instructs you to look for a particular file (e.g., 'if the user mentions turnover, find 离职报告.pdf'). This bypasses semantic search and reads the file directly — use it ONLY when a specific file name is mentioned, NOT for general topic searches.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "keyword": {
+                        "type": "string",
+                        "description": "File name keyword to search for (case-insensitive substring match). E.g. '离职报告' or '考勤制度.pdf'."
+                    }
+                },
+                "required": ["keyword"]
             }
         }
     },
@@ -374,6 +483,8 @@ async def execute_tool(name: str, user_id: str = "default",
             if not kwargs.get("category") and default_category:
                 kwargs["category"] = default_category
         elif name == "query_experience":
+            kwargs["user_id"] = user_id
+        elif name == "find_file_by_name":
             kwargs["user_id"] = user_id
         elif name in ("list_db_connections", "list_db_tables", "query_db"):
             kwargs["db_scope"] = db_scope

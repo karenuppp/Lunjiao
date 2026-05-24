@@ -4,6 +4,8 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+import json
+
 from app.config import settings
 
 
@@ -114,6 +116,33 @@ class RAGEngineAdapter:
         if user_id not in self._rags:
             await self._init_user_rag(user_id)
 
+    def _build_category_map(self) -> dict[str, str]:
+        """Build file_path → category mapping from .meta files on disk."""
+        mapping: dict[str, str] = {}
+        upload_dir = Path(settings.upload_dir)
+        if not upload_dir.exists():
+            return mapping
+        for meta_path in upload_dir.glob("*.meta"):
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    meta = json.load(f)
+            except Exception:
+                continue
+            category = meta.get("category", "")
+            if category == "上传文件":
+                category = ""
+            original_name = meta.get("original_name", "")
+            if not original_name:
+                continue
+            file_id = meta_path.stem
+            for fpath in upload_dir.iterdir():
+                if not fpath.is_file() or fpath.suffix == ".meta":
+                    continue
+                if fpath.name.startswith(f"{file_id}_"):
+                    mapping[str(fpath.resolve())] = category
+                    break
+        return mapping
+
     async def index_file(
         self, file_path: str, file_name: str | None = None,
         category: str = "", user_id: str = "default"
@@ -185,7 +214,7 @@ class RAGEngineAdapter:
 
             try:
                 await lightrag.full_docs.upsert(
-                    {doc_key: {"content": text_content, "file_path": ""}}
+                    {doc_key: {"content": text_content, "file_path": file_path}}
                 )
 
                 inserting_chunks = {}
@@ -196,7 +225,7 @@ class RAGEngineAdapter:
                         "full_doc_id": doc_key,
                         "tokens": len(chunk_text.split()),
                         "chunk_order_index": idx,
-                        "file_path": "",
+                        "file_path": file_path,
                     }
 
                 await lightrag.chunks_vdb.upsert(inserting_chunks)
@@ -234,6 +263,11 @@ class RAGEngineAdapter:
 
         try:
             from lightrag.base import QueryParam
+
+            if category:
+                return await self._search_with_category(
+                    lightrag, query_text, category, top_k, user_id
+                )
 
             param = QueryParam(
                 mode="naive",
@@ -277,6 +311,65 @@ class RAGEngineAdapter:
                 "text": text,
                 "file_name": "知识库",
                 "category": category or "全部",
+                "score": 1.0,
+            })
+            if len(results) >= top_k:
+                break
+
+        return results
+
+    async def _search_with_category(
+        self, lightrag, query_text: str, category: str, top_k: int, user_id: str
+    ) -> list[dict]:
+        """Search LightRAG with structured results, then filter by category."""
+        from lightrag.base import QueryParam
+
+        param = QueryParam(
+            mode="naive",
+            only_need_context=True,
+            top_k=settings.rag_chunk_top_k,
+            chunk_top_k=settings.rag_chunk_top_k,
+            enable_rerank=False,
+        )
+
+        try:
+            data_result = await lightrag.aquery_data(query_text, param=param)
+        except Exception as e:
+            print(f"[RAG-Anything] aquery_data error: {e}")
+            return []
+
+        chunks = []
+        if data_result.get("status") == "success":
+            chunks = data_result.get("data", {}).get("chunks", [])
+
+        if not chunks:
+            return []
+
+        cat_map = self._build_category_map()
+
+        matched = []
+        for c in chunks:
+            fp = c.get("file_path", "")
+            chunk_cat = cat_map.get(fp, "")
+            if chunk_cat == category:
+                matched.append(c)
+
+        if not matched:
+            return []
+
+        seen = set()
+        results = []
+        for c in matched:
+            text = c.get("content", "").strip()
+            if not text or text in seen:
+                continue
+            seen.add(text)
+            fp = c.get("file_path", "")
+            file_name = Path(fp).name if fp else "知识库"
+            results.append({
+                "text": text,
+                "file_name": file_name,
+                "category": category,
                 "score": 1.0,
             })
             if len(results) >= top_k:

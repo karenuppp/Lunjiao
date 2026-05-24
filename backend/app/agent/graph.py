@@ -268,6 +268,8 @@ async def run_agent_stream_simple(
                     data_sources_detected.append("检索知识库")
                 elif func_name in ("query_db", "list_db_tables"):
                     data_sources_detected.append("查询数据库")
+                elif func_name == "find_file_by_name":
+                    data_sources_detected.append("查找文件")
 
                 if func_name == "query_rag":
                     kb_label = {
@@ -286,6 +288,9 @@ async def run_agent_stream_simple(
                     conn_id = args.get("connection_id", 0)
                     conn_name = _lookup_connection_name(conn_id) if conn_id else ""
                     tool_label = f"查询{conn_name}数据库..." if conn_name else "查询数据库..."
+                elif func_name == "find_file_by_name":
+                    keyword = args.get("keyword", "")
+                    tool_label = f"查找文件「{keyword}」..." if keyword else "查找文件..."
                 else:
                     tool_label = func_name
 
