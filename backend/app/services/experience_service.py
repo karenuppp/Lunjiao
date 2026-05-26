@@ -3,7 +3,8 @@ from __future__ import annotations
 import json
 import hashlib
 import asyncio
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -96,7 +97,6 @@ async def _llm_extract_experiences(
         result = json.loads(content)
     except json.JSONDecodeError:
         # Try to extract from code block
-        import re
         match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', content, re.DOTALL)
         if match:
             try:
@@ -149,35 +149,50 @@ async def _remove_experience_from_rag(exp_id: int, user_id: str):
     print(f"[Experience] Vector removal requested for exp_{exp_id} (soft-skipped)")
 
 
-def _check_duplicate(title: str, content: str, user_id: str) -> Optional[Experience]:
+def _compute_recency_weight(created_at, last_accessed) -> float:
+    """Calculate recency score (0-1). 90-day linear decay, floor at 0.3."""
+    ref_date = last_accessed or created_at
+    if ref_date is None:
+        return 0.5
+    days = (datetime.now() - ref_date).days
+    return max(0.3, 1.0 - days / 90.0)
+
+
+async def _check_semantic_duplicate(content: str, user_id: str) -> Optional[Experience]:
+    """Check for near-duplicate by searching the experience vector index."""
+    results = await _search_vector_only(content, user_id, top_k=1)
+    if not results:
+        return None
+
+    top = results[0]
+    # Parse title from indexed text (format: "标题: xxx\n内容: yyy\n标签: zzz")
+    match = re.search(r'标题:\s*(.+?)(?:\n|$)', top["text"])
+    if not match:
+        return None
+    title = match.group(1).strip()
+
     db = SessionLocal()
     try:
-        existing = db.query(Experience).filter(
+        exp = db.query(Experience).filter(
             Experience.user_id == user_id,
             Experience.title == title,
             Experience.status == ExperienceStatus.active,
         ).first()
-        if existing:
-            return existing
-        return None
+        return exp
     finally:
         db.close()
 
 
-async def search_relevant(
-    query_text: str,
-    user_id: str,
-    top_k: int | None = None,
+async def _search_vector_only(
+    query_text: str, user_id: str, top_k: int = 3,
 ) -> list[dict]:
-    top_k = top_k or settings.experience_top_k
-
+    """Raw vector search without scoring, used internally for dedup."""
     try:
         from app.rag_engine import rag
         await rag._ensure_ready(f"exp_default")
-
-        lightrag = rag._rags[f"exp_default"].lightrag
         from lightrag.base import QueryParam
 
+        lightrag = rag._rags[f"exp_default"].lightrag
         param = QueryParam(
             mode="naive",
             only_need_context=True,
@@ -186,11 +201,9 @@ async def search_relevant(
             enable_rerank=False,
         )
         result_text = await lightrag.aquery(query_text, param=param)
-
         if not result_text or not result_text.strip():
             return []
 
-        import re
         content_parts = []
         for block in re.findall(r"```(?:json)?\s*(\{.*?\})\s*```", result_text, re.DOTALL):
             try:
@@ -203,28 +216,110 @@ async def search_relevant(
         if not content_parts:
             content_parts.append(result_text.strip())
 
-        results = []
-        seen = set()
-        db = SessionLocal()
-        try:
-            for text in content_parts:
-                text = text.strip()
-                if not text or text in seen:
-                    continue
-                seen.add(text)
-                results.append({
-                    "text": text,
-                    "source": "历史经验",
-                })
-                if len(results) >= top_k:
-                    break
-        finally:
-            db.close()
-
-        return results
+        return [{"text": t.strip()} for t in content_parts if t.strip()]
     except Exception as e:
-        print(f"[Experience] Search failed: {e}")
+        print(f"[Experience] Vector search failed: {e}")
         return []
+
+
+async def search_relevant(
+    query_text: str,
+    user_id: str,
+    top_k: int | None = None,
+) -> list[dict]:
+    top_k = top_k or settings.experience_top_k
+
+    # ── 1. Vector search ──
+    vector_results = await _search_vector_only(query_text, user_id, top_k=top_k * 2)
+
+    # ── 2. DB keyword search for recency / access boosts ──
+    db = SessionLocal()
+    try:
+        keywords = query_text.strip().split()
+        db_results: list[dict] = []
+        if keywords:
+            db_query = db.query(Experience).filter(
+                Experience.user_id == user_id,
+                Experience.status == ExperienceStatus.active,
+            )
+            keyword_filter = db_query.filter(
+                db_query.column_descriptions[0] == db_query.column_descriptions[0]  # dummy, will rebuild
+            )
+            # Build OR conditions for keyword matching on title and content
+            from sqlalchemy import or_
+            conditions = []
+            for kw in keywords[:3]:  # limit to 3 keywords
+                conditions.append(Experience.title.contains(kw))
+                conditions.append(Experience.content.contains(kw))
+            if conditions:
+                db_rows = db.query(Experience).filter(
+                    Experience.user_id == user_id,
+                    Experience.status == ExperienceStatus.active,
+                    or_(*conditions),
+                ).order_by(desc(Experience.last_accessed)).limit(top_k * 2).all()
+                for row in db_rows:
+                    recency = _compute_recency_weight(row.created_at, row.last_accessed)
+                    access_score = min(1.0, row.access_count / 10.0)
+                    db_results.append({
+                        "text": f"标题: {row.title}\n内容: {row.content}",
+                        "source": "历史经验",
+                        "_recency": recency,
+                        "_access": access_score,
+                        "_exp_id": row.id,
+                    })
+    finally:
+        db.close()
+
+    # ── 3. Merge & composite score ──
+    merged: dict[str, dict] = {}  # keyed by normalized text prefix
+
+    for r in vector_results:
+        key = r["text"][:80]
+        r["_sim"] = 1.0  # vector hits get base similarity score
+        r["_recency"] = 0.5
+        r["_access"] = 0.0
+        merged[key] = r
+
+    for r in db_results:
+        key = r["text"][:80]
+        r["_sim"] = 0.7  # keyword hits get lower base similarity
+        if key not in merged or r["_recency"] > merged[key].get("_recency", 0):
+            merged[key] = r  # keep the match with better recency
+
+    # ── 4. Score & rank ──
+    scored = []
+    for r in merged.values():
+        sim = r.get("_sim", 0.5)
+        recency = r.get("_recency", 0.5)
+        access = r.get("_access", 0.0)
+        composite = sim * 0.5 + recency * 0.3 + access * 0.2
+
+        # Update access tracking for matched DB experiences
+        exp_id = r.get("_exp_id")
+        if exp_id:
+            _bump_access(exp_id)
+
+        # Clean internal keys
+        out = {"text": r["text"], "source": r.get("source", "历史经验")}
+        scored.append((composite, out))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [s[1] for s in scored[:top_k]]
+
+
+def _bump_access(exp_id: int):
+    """Increment access_count and update last_accessed for an experience."""
+    db = SessionLocal()
+    try:
+        exp = db.query(Experience).filter(Experience.id == exp_id).first()
+        if exp:
+            exp.access_count = (exp.access_count or 0) + 1
+            exp.last_accessed = datetime.now()
+            db.commit()
+    except Exception:
+        pass
+    finally:
+        db.close()
 
 
 async def extract_and_save(
@@ -261,10 +356,10 @@ async def extract_and_save(
             if not valid_tags and available_tags:
                 valid_tags = [available_tags[0]]
 
-            dup = _check_duplicate(title, content, user_id)
+            dup = await _check_semantic_duplicate(content, user_id)
             if dup:
                 dup.confidence = min(1.0, dup.confidence + 0.05)
-                dup.access_count = dup.access_count + 1
+                dup.access_count = (dup.access_count or 0) + 1
                 dup.last_accessed = datetime.now()
                 dup.tags = valid_tags
                 db.commit()
