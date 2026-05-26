@@ -51,3 +51,22 @@ def init_db():
     import app.models.experience  # noqa: ensure model is registered
     Base.metadata.create_all(bind=engine)
     _migrate()
+
+    # Ensure default system prompt exists
+    from app.agent.prompts import DEFAULT_SYSTEM_PROMPT
+    from app.models.system_prompt import SystemPrompt
+    db = SessionLocal()
+    try:
+        existing = db.query(SystemPrompt).filter(SystemPrompt.prompt_key == "default").first()
+        if existing is None:
+            db.add(SystemPrompt(
+                prompt_key="default",
+                title="默认提示词",
+                prompt_content=DEFAULT_SYSTEM_PROMPT,
+            ))
+            db.commit()
+        elif not existing.title:
+            existing.title = "默认提示词"
+            db.commit()
+    finally:
+        db.close()

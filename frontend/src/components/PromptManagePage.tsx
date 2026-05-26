@@ -187,7 +187,7 @@ export default function PromptManagePage() {
             value={content}
             onChange={(e) => setContent(e.target.value)}
             placeholder="请输入系统提示词内容..."
-            rows={8}
+            rows={16}
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 13,
