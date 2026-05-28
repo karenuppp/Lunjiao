@@ -101,7 +101,7 @@ function ChatLayout() {
               messages={chat.messages ?? []}
               isLoading={chat.isLoading ?? false}
               currentTool={chat.currentTool ?? null}
-              onSendChat={(msg, _files, cat) => chat.sendChat(msg, cat)}
+              onSendChat={(msg, _files, cat, visibleMsg) => chat.sendChat(msg, cat, visibleMsg)}
               onFeedback={(msgId, rating) => chat.sendFeedback(msgId, rating)}
             />
           )}

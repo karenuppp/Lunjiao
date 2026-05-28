@@ -307,7 +307,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
 interface ChatContextValue {
   state: ChatState
   dispatch: React.Dispatch<ChatAction>
-  sendChat: (message: string, category?: string) => void
+  sendChat: (message: string, category?: string, visibleMessage?: string) => void
   newConversation: () => void
   switchConversation: (id: string | null) => void
   removeConversation: (id: string) => void
@@ -376,7 +376,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const sendChat = useCallback(
-    (message: string, category?: string) => {
+    (message: string, category?: string, visibleMessage?: string) => {
       if (!message.trim() || state.isLoading) return
 
       let convId = state.activeConversationId
@@ -384,14 +384,16 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         convId = `conv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
         dispatch({
           type: 'NEW_CONVERSATION',
-          payload: { id: convId, title: message.slice(0, 30) },
+          payload: { id: convId, title: (visibleMessage || message).slice(0, 30) },
         })
       }
 
+      // Show only visible message in UI (template hidden)
+      const displayContent = visibleMessage || message
       const userMsg: ChatMessage = {
         id: `msg-${Date.now()}-user`,
         role: 'user',
-        content: message,
+        content: displayContent,
       }
       dispatch({ type: 'ADD_MESSAGE', payload: { conversationId: convId, message: userMsg } })
 

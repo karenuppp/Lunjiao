@@ -25,7 +25,7 @@ interface ChatPanelProps {
   messages: Message[]
   isLoading: boolean
   currentTool: string | null
-  onSendChat: (message: string, contextFiles?: ContextFile[], category?: string) => void
+  onSendChat: (message: string, contextFiles?: ContextFile[], category?: string, visibleMessage?: string) => void
   onFeedback: (messageId: string, rating: 'up' | 'down') => void
 }
 
@@ -170,19 +170,22 @@ export default function ChatPanel({
   const handleSend = () => {
     if (!canSend) return
 
-    // Assemble message: template → files → user input
-    let message = ''
-    if (selectedTemplate) {
-      message += selectedTemplate.content + '\n\n'
-    }
+    // Assemble visible message (files + user input only, template goes to backend via system_prompt)
+    let visibleMessage = ''
     if (contextFiles.length > 0) {
-      message += '参考文件：\n'
-      message += contextFiles.map(f => `- ${f.name}`).join('\n')
-      message += '\n\n'
+      visibleMessage += '参考文件：\n'
+      visibleMessage += contextFiles.map(f => `- ${f.name}`).join('\n')
+      visibleMessage += '\n\n'
     }
-    message += input.trim()
+    visibleMessage += input.trim()
 
-    onSendChat(message, contextFiles.length > 0 ? contextFiles : undefined, selectedTemplate?.title)
+    // Full message sent to backend includes template as system prompt
+    let backendMessage = visibleMessage
+    if (selectedTemplate) {
+      backendMessage = selectedTemplate.content + '\n\n' + backendMessage
+    }
+
+    onSendChat(backendMessage, contextFiles.length > 0 ? contextFiles : undefined, selectedTemplate?.title, visibleMessage)
     setInput('')
     setContextFiles([])
   }

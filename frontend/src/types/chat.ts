@@ -21,6 +21,7 @@ export interface Conversation {
 
 export interface ChatRequest {
   message: string
+  system_prompt?: string
   conversation_id?: string | null
   data_category?: string[]
   data_sources?: string[]
