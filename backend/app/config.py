@@ -45,6 +45,7 @@ class Settings:
     port: int = int(os.getenv("PORT", "8000"))
 
     upload_dir: str = os.getenv("UPLOAD_DIR", str(Path(__file__).parent.parent / "uploads"))
+    talk_dir: str = os.getenv("TALK_DIR", str(Path(__file__).parent.parent.parent / "talk"))
     max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "50"))
     allowed_extensions: list[str] = os.getenv(
         "ALLOWED_EXTENSIONS",

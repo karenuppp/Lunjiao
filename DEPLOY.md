@@ -96,6 +96,7 @@ docker run -d \
   --env-file /opt/zhiwei/.env \
   -v /opt/zhiwei/uploads:/app/uploads \
   -v /opt/zhiwei/opinions:/app/opinions \
+  -v /opt/zhiwei/talk:/app/talk \
   zhiwei:latest
 ```
 
@@ -134,6 +135,7 @@ curl http://localhost:8000/api/health
 |------|------|--------|
 | `/app/uploads` | 用户上传的文件和 .meta 元数据 | 需挂载 |
 | `/app/opinions` | 用户反馈 .txt 文件 | 需挂载 |
+| `/app/talk` | 对话记录 JSON 文件 | 需挂载 |
 | `/app/backend/.rag_storage` | LightRAG 向量索引 | 建议挂载 |
 | `/app/backend/.rag_parse_output` | MinerU 解析缓存 | 建议挂载 |
 
@@ -147,6 +149,7 @@ docker run -d \
   --env-file /opt/zhiwei/.env \
   -v /opt/zhiwei/uploads:/app/uploads \
   -v /opt/zhiwei/opinions:/app/opinions \
+  -v /opt/zhiwei/talk:/app/talk \
   -v /opt/zhiwei/rag_storage:/app/backend/.rag_storage \
   -v /opt/zhiwei/rag_parse_output:/app/backend/.rag_parse_output \
   zhiwei:latest
@@ -196,6 +199,7 @@ docker load -i zhiwei-new.tar
 | `DB_PASSWORD` | 123456 | MySQL 密码 |
 | `DB_NAME` | zhiwei | MySQL 数据库名 |
 | `UPLOAD_DIR` | /app/uploads | 上传文件目录 |
+| `TALK_DIR` | /app/talk | 对话记录目录 |
 | `PORT` | 8000 | 应用监听端口 |
 | `MAX_UPLOAD_SIZE_MB` | 50 | 上传文件大小限制 |
 | `RAG_CHUNK_TOP_K` | 5 | RAG 返回片段数 |

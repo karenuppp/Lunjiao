@@ -1,7 +1,6 @@
 from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
-from typing import Optional, List, Dict, Any
-import uuid
+from typing import Optional, List, Dict
 import json
 import traceback
 
@@ -58,21 +57,15 @@ class ChatResponse(BaseModel):
     report_text: Optional[str] = None
 
 
-_conversations: Dict[str, list] = {}
+from app.api.history import persistent_store
 
 
 def _get_or_create_conversation(conv_id: str | None) -> tuple[str, list]:
-    if conv_id and conv_id in _conversations:
-        return conv_id, _conversations[conv_id]
-
-    new_id = f"conv-{uuid.uuid4().hex[:8]}"
-    _conversations[new_id] = []
-    return new_id, _conversations[new_id]
+    return persistent_store.get_or_create(conv_id)
 
 
 def _add_to_history(conv_id: str, role: str, content: str):
-    if conv_id in _conversations:
-        _conversations[conv_id].append({"role": role, "content": content})
+    persistent_store.add_message(conv_id, role, content)
 
 
 @router.post("/")

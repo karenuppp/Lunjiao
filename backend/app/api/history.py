@@ -1,7 +1,13 @@
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Optional
+
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing import List, Optional
-from datetime import datetime
+
+from app.config import settings
 
 router = APIRouter()
 
@@ -19,56 +25,155 @@ class Message(BaseModel):
     role: str  # "user" | "assistant"
     content: str
     created_at: str
-    data_sources_used: List[str] = []
+    data_sources_used: list[str] = []
 
 
-# Conversation cache — replace with DB layer in production
-_conversation_store = [
-    Conversation(
-        id="conv-001",
-        title="上月设备故障率趋势",
-        created_at="2026-04-27T10:00:00",
-        updated_at="2026-04-27T10:05:00",
-        message_count=3,
-    ),
-]
+def _talk_dir() -> Path:
+    d = Path(settings.talk_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
 
+
+def _conv_path(conv_id: str) -> Path:
+    return _talk_dir() / f"{conv_id}.json"
+
+
+def _read_conv(conv_id: str) -> dict | None:
+    p = _conv_path(conv_id)
+    if not p.exists():
+        return None
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
+def _write_conv(conv: dict):
+    p = _conv_path(conv["id"])
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(conv, f, ensure_ascii=False, indent=2)
+
+
+def _load_all_conversations() -> list[Conversation]:
+    convs = []
+    for fp in sorted(_talk_dir().glob("*.json"), key=os.path.getmtime, reverse=True):
+        try:
+            data = json.loads(fp.read_text(encoding="utf-8"))
+            convs.append(Conversation(
+                id=data["id"],
+                title=data.get("title", "未命名对话"),
+                created_at=data.get("created_at", ""),
+                updated_at=data.get("updated_at", ""),
+                message_count=len(data.get("messages", [])),
+            ))
+        except Exception:
+            pass
+    return convs
+
+
+def _load_messages(conv_id: str) -> list[Message]:
+    data = _read_conv(conv_id)
+    if not data:
+        return []
+    messages = []
+    for i, m in enumerate(data.get("messages", [])):
+        messages.append(Message(
+            id=m.get("id", f"msg-{i:03d}"),
+            role=m.get("role", "user"),
+            content=m.get("content", ""),
+            created_at=m.get("created_at", ""),
+            data_sources_used=m.get("data_sources_used", []),
+        ))
+    return messages
+
+
+# ── Shared persistent store (also used by chat.py) ──
+
+class ConversationStore:
+    """Persistent, file-backed conversation store shared with chat.py."""
+
+    def get_or_create(self, conv_id: str | None, title: str = "新对话") -> tuple[str, list[dict]]:
+        if conv_id:
+            data = _read_conv(conv_id)
+            if data:
+                return conv_id, data.setdefault("messages", [])
+
+        new_id = conv_id or f"conv-{int(datetime.now().timestamp() * 1000)}"
+        now = datetime.now(timezone.utc).isoformat()
+        conv = {
+            "id": new_id,
+            "title": title[:80],
+            "created_at": now,
+            "updated_at": now,
+            "messages": [],
+        }
+        _write_conv(conv)
+        return new_id, conv["messages"]
+
+    def add_message(self, conv_id: str, role: str, content: str):
+        data = _read_conv(conv_id)
+        if not data:
+            return
+        data["messages"].append({
+            "id": f"msg-{len(data['messages']) + 1:03d}",
+            "role": role,
+            "content": content,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "data_sources_used": [],
+        })
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        if len(data["messages"]) <= 1:
+            data["title"] = content[:80]
+        _write_conv(data)
+
+    def delete(self, conv_id: str) -> bool:
+        p = _conv_path(conv_id)
+        if p.exists():
+            p.unlink()
+            return True
+        return False
+
+    def set_message_sources(self, conv_id: str, msg_id: str, sources: list[str]):
+        data = _read_conv(conv_id)
+        if not data:
+            return
+        for m in data.get("messages", []):
+            if m.get("id") == msg_id and m.get("role") == "assistant":
+                m["data_sources_used"] = sources
+                _write_conv(data)
+                break
+
+
+persistent_store = ConversationStore()
+
+
+# ── API routes ──
 
 @router.get("/")
 async def list_conversations():
-    return {"conversations": sorted(_conversation_store, key=lambda c: c.updated_at, reverse=True)}
+    return {"conversations": _load_all_conversations()}
 
 
 @router.post("/")
 async def create_conversation(title: Optional[str] = "新对话"):
-    conv = Conversation(
-        id=f"conv-{datetime.utcnow().timestamp():.0f}",
-        title=title or "新对话",
-        created_at=datetime.utcnow().isoformat(),
-        updated_at=datetime.utcnow().isoformat(),
+    conv_id, _ = persistent_store.get_or_create(None, title or "新对话")
+    data = _read_conv(conv_id)
+    return Conversation(
+        id=data["id"],
+        title=data.get("title", "新对话"),
+        created_at=data.get("created_at", ""),
+        updated_at=data.get("updated_at", ""),
+        message_count=len(data.get("messages", [])),
     )
-    _conversation_store.append(conv)
-    return conv
 
 
 @router.delete("/{conversation_id}")
 async def delete_conversation(conversation_id: str):
-    return {"status": "ok", "deleted": conversation_id}
+    ok = persistent_store.delete(conversation_id)
+    return {"status": "ok" if ok else "not_found", "deleted": conversation_id}
 
 
 @router.get("/{conversation_id}/messages")
 async def list_messages(conversation_id: str):
-    messages = [
-        Message(
-            id="msg-001", role="user",
-            content="上月设备故障率趋势如何？",
-            created_at="2026-04-27T10:00:00",
-        ),
-        Message(
-            id="msg-002", role="assistant",
-            content="根据设备数据库的数据分析，上月（2026年3月）设备故障率为 **3.2%**，较前月（2.8%）上升 0.4 个百分点。\n\n主要故障集中在：\n1. 生产线 A 的传送带电机（故障 5 次）\n2. 包装机传感器（故障 3 次）\n\n建议关注传送带电机的定期维护。",
-            data_sources_used=["设备数据库", "设备日志.xlsx"],
-            created_at="2026-04-27T10:00:05",
-        ),
-    ]
-    return {"messages": messages}
+    return {"messages": _load_messages(conversation_id)}

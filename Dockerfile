@@ -27,7 +27,7 @@ COPY backend/ /app/backend/
 COPY --from=frontend-builder /build/frontend/dist /app/frontend/dist
 
 # 运行时数据目录
-RUN mkdir -p /app/uploads /app/opinions
+RUN mkdir -p /app/uploads /app/opinions /app/talk
 
 ENV UPLOAD_DIR=/app/uploads
 ENV PYTHONUNBUFFERED=1
