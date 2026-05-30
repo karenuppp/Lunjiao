@@ -19,6 +19,7 @@ import DbManagePage from './components/DbManagePage'
 import UserManagePage from './components/UserManagePage'
 import PromptManagePage from './components/PromptManagePage'
 import ExpManagePage from './components/ExpManagePage'
+import SkillManagePage from './components/SkillManagePage'
 
 const { Sider, Content } = Layout
 
@@ -214,6 +215,17 @@ function AppInner() {
                 <ProtectedRoute requireAdmin>
                   <AdminLayout title="经验管理">
                     <ExpManagePage />
+                  </AdminLayout>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/admin/skills"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <AdminLayout title="技能工厂">
+                    <SkillManagePage />
                   </AdminLayout>
                 </ProtectedRoute>
               }

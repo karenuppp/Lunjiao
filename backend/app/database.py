@@ -27,6 +27,15 @@ def _migrate():
         migrations = [
             "ALTER TABLE system_prompt ADD COLUMN title VARCHAR(128) NOT NULL DEFAULT ''",
             "ALTER TABLE users ADD COLUMN exp_extract_enabled TINYINT(1) NOT NULL DEFAULT 0",
+            "CREATE TABLE IF NOT EXISTS skills ("
+            " id INT AUTO_INCREMENT PRIMARY KEY,"
+            " title VARCHAR(128) NOT NULL,"
+            " description VARCHAR(512) NOT NULL DEFAULT '',"
+            " content TEXT NOT NULL,"
+            " created_by VARCHAR(64) NOT NULL DEFAULT 'admin',"
+            " created_at DATETIME DEFAULT CURRENT_TIMESTAMP,"
+            " updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP"
+            ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
         ]
         for sql in migrations:
             try:
@@ -49,6 +58,7 @@ def init_db():
     import app.models.db_connection  # noqa: ensure model is registered
     import app.models.system_prompt  # noqa: ensure model is registered
     import app.models.experience  # noqa: ensure model is registered
+    import app.models.skill  # noqa: ensure model is registered
     Base.metadata.create_all(bind=engine)
     _migrate()
 

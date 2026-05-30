@@ -591,6 +591,69 @@ export async function dismissExperienceSuggestion(convId: string): Promise<{ ok:
   return res.json()
 }
 
+export interface SkillRecord {
+  id: number
+  title: string
+  description: string
+  content: string
+  created_by: string
+  created_at: string | null
+  updated_at: string | null
+}
+
+export async function listSkills(): Promise<SkillRecord[]> {
+  const res = await fetch(`${BASE_URL}/skills`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function createSkill(title: string, content: string, createdBy?: string): Promise<SkillRecord> {
+  const res = await fetch(`${BASE_URL}/skills`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, content, created_by: createdBy || 'admin' }),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as any).detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function updateSkill(id: number, payload: { title?: string; content?: string }): Promise<SkillRecord> {
+  const res = await fetch(`${BASE_URL}/skills/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as any).detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+export async function deleteSkill(id: number): Promise<void> {
+  const res = await fetch(`${BASE_URL}/skills/${id}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as any).detail || `HTTP ${res.status}`)
+  }
+}
+
+export async function generateSkill(title: string, requirement: string): Promise<{ ok: boolean; content: string; description: string }> {
+  const res = await fetch(`${BASE_URL}/skills/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title, requirement }),
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as any).detail || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
 export async function submitOpinion(content: string): Promise<{ ok: boolean }> {
   const res = await fetch(`${BASE_URL}/opinion`, {
     method: 'POST',

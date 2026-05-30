@@ -1,4 +1,5 @@
 import json
+import re
 from typing import AsyncIterator, List, Optional, Any
 
 from openai import AsyncOpenAI
@@ -375,6 +376,9 @@ async def run_agent_stream_simple(
                 elif func_name == "find_file_by_name":
                     keyword = args.get("keyword", "")
                     tool_label = f"查找文件「{keyword}」..." if keyword else "查找文件..."
+                elif func_name == "use_skill":
+                    skill_name = args.get("skill_name", "")
+                    tool_label = f"正在调用{skill_name}技能..." if skill_name else "正在调用技能..."
                 else:
                     tool_label = func_name
 

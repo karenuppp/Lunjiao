@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
-from app.api import chat, data_sources, history, upload, auth, db_connections, prompt, experience, opinion
+from app.api import chat, data_sources, history, upload, auth, db_connections, prompt, experience, opinion, skill
 from app.database import init_db
 from pathlib import Path
 
@@ -54,6 +54,7 @@ app.include_router(prompt.router, prefix="/api/prompt", tags=["prompt"])
 app.include_router(prompt.templates_router, prefix="/api/prompts", tags=["prompts"])
 app.include_router(experience.router, prefix="/api/experiences", tags=["experiences"])
 app.include_router(opinion.router, prefix="/api", tags=["opinion"])
+app.include_router(skill.router, prefix="/api/skills", tags=["skills"])
 
 # ── Production: serve built frontend when dist/ exists ──
 dist_dir = Path(__file__).parent.parent.parent / "frontend" / "dist"

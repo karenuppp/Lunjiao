@@ -325,6 +325,31 @@ async def query_experience(query_text: str, top_k: int = 3,
     return "\n\n".join(lines)
 
 
+async def use_skill(skill_name: str) -> str:
+    """Look up a skill by name and return its specification for the agent to follow."""
+    from app.database import SessionLocal
+    from app.models.skill import Skill
+
+    db = SessionLocal()
+    try:
+        row = db.query(Skill).filter(Skill.title == skill_name).first()
+        if not row:
+            # Try partial match
+            row = db.query(Skill).filter(Skill.title.ilike(f"%{skill_name}%")).first()
+        if not row:
+            available = db.query(Skill.title).all()
+            names = [r.title for r in available]
+            if names:
+                return f"未找到技能「{skill_name}」。可用技能：{', '.join(names)}"
+            return f"未找到技能「{skill_name}」，且当前没有已配置的技能。"
+        return (
+            f"**技能：{row.title}**\n\n"
+            f"{row.content}"
+        )
+    finally:
+        db.close()
+
+
 TOOL_FUNCTIONS: dict[str, callable] = {
     "query_rag": query_rag,
     "list_db_connections": list_db_connections,
@@ -332,6 +357,7 @@ TOOL_FUNCTIONS: dict[str, callable] = {
     "query_db": query_db,
     "query_experience": query_experience,
     "find_file_by_name": find_file_by_name,
+    "use_skill": use_skill,
 }
 
 TOOL_SCHEMAS: list[dict] = [
@@ -427,6 +453,23 @@ TOOL_SCHEMAS: list[dict] = [
                     }
                 },
                 "required": ["connection_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "use_skill",
+            "description": "Look up and load a skill specification by name. Skills are predefined workflows created by the admin in the '技能工厂' page. Use this when the user's request matches a skill's purpose (e.g., generating reports, data analysis workflows, document processing). The skill content provides step-by-step instructions to follow.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill_name": {
+                        "type": "string",
+                        "description": "The name/title of the skill to look up. Use partial matching if unsure."
+                    }
+                },
+                "required": ["skill_name"]
             }
         }
     },

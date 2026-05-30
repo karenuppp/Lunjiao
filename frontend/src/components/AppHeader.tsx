@@ -124,6 +124,15 @@ export default function AppHeader({
               经验管理
             </button>
           )}
+
+          {isAdmin && (
+            <button
+              className={`header-tab ${location.pathname.startsWith('/admin/skills') ? 'header-tab--active' : ''}`}
+              onClick={() => navigate('/admin/skills')}
+            >
+              技能工厂
+            </button>
+          )}
         </nav>
       </div>
 

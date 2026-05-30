@@ -18,7 +18,6 @@ const STATUS_TABS = [
   { key: 'active', label: '活跃' },
   { key: 'pending', label: '待审核' },
   { key: 'archived', label: '已归档' },
-  { key: 'deprecated', label: '已废弃' },
 ]
 
 export default function ExpManagePage() {
