@@ -654,6 +654,24 @@ export async function generateSkill(title: string, requirement: string): Promise
   return res.json()
 }
 
+export interface SearchResult {
+  conversation_id: string
+  conversation_title: string
+  message_id: string
+  role: string
+  excerpt: string
+  keyword: string
+  created_at: string
+}
+
+export async function searchMessages(keyword: string, userId?: string): Promise<{ results: SearchResult[] }> {
+  const params = new URLSearchParams({ keyword })
+  if (userId) params.set('user_id', userId)
+  const res = await fetch(`${BASE_URL}/history/search?${params.toString()}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
 export async function submitOpinion(content: string): Promise<{ ok: boolean }> {
   const res = await fetch(`${BASE_URL}/opinion`, {
     method: 'POST',

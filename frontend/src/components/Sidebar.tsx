@@ -1,5 +1,5 @@
 import { Tooltip } from 'antd'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, Search } from 'lucide-react'
 
 interface SidebarConv {
   id: string
@@ -15,18 +15,25 @@ interface SidebarProps {
   onNewConversation: () => void
   onSwitchConversation: (id: string | null) => void
   onRemoveConversation: (id: string) => void
+  onSearchClick: () => void
 }
 
 export default function Sidebar({
   collapsed, activeConversationId, conversations,
   onNewConversation, onSwitchConversation, onRemoveConversation,
+  onSearchClick,
 }: SidebarProps) {
   return (
     <div className="sidebar-container">
-      <button onClick={onNewConversation} className="new-chat-btn" title="新建对话">
-        <Plus size={16} strokeWidth={2.5} />
-        {!collapsed && <span>新对话</span>}
-      </button>
+      <div className="sidebar-top-actions">
+        <button onClick={onNewConversation} className="new-chat-btn" title="新建对话">
+          <Plus size={16} strokeWidth={2.5} />
+          {!collapsed && <span>新对话</span>}
+        </button>
+        <button onClick={onSearchClick} className="search-chat-btn" title="搜索对话">
+          <Search size={16} strokeWidth={2} />
+        </button>
+      </div>
 
       <div className="sidebar-divider" />
 

@@ -185,6 +185,49 @@ async def delete_conversation(conversation_id: str):
     return {"status": "ok" if ok else "not_found", "deleted": conversation_id}
 
 
+@router.get("/search")
+async def search_messages(keyword: str, user_id: str = "default"):
+    """Search all conversation messages for a keyword (user-scoped)."""
+    kw = keyword.strip().lower()
+    if not kw or len(kw) < 1:
+        return {"results": []}
+
+    results = []
+    for fp in sorted(_talk_dir().glob("*.json"), key=os.path.getmtime, reverse=True):
+        try:
+            data = json.loads(fp.read_text(encoding="utf-8"))
+            if user_id and data.get("user_id", "default") != user_id:
+                continue
+            conv_title = data.get("title", "未命名对话")
+            conv_id = data["id"]
+            for m in data.get("messages", []):
+                content = m.get("content", "")
+                if kw in content.lower():
+                    # Extract context around the match
+                    idx = content.lower().index(kw)
+                    start = max(0, idx - 30)
+                    end = min(len(content), idx + len(kw) + 60)
+                    excerpt = content[start:end]
+                    if start > 0:
+                        excerpt = "…" + excerpt
+                    if end < len(content):
+                        excerpt = excerpt + "…"
+                    results.append({
+                        "conversation_id": conv_id,
+                        "conversation_title": conv_title[:60],
+                        "message_id": m.get("id", ""),
+                        "role": m.get("role", "user"),
+                        "excerpt": excerpt,
+                        "keyword": keyword,
+                        "created_at": m.get("created_at", ""),
+                    })
+        except Exception:
+            pass
+
+    # Return top 20 results
+    return {"results": results[:20]}
+
+
 @router.get("/{conversation_id}/messages")
 async def list_messages(conversation_id: str):
     return {"messages": _load_messages(conversation_id)}

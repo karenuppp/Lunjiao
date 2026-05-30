@@ -20,6 +20,7 @@ import UserManagePage from './components/UserManagePage'
 import PromptManagePage from './components/PromptManagePage'
 import ExpManagePage from './components/ExpManagePage'
 import SkillManagePage from './components/SkillManagePage'
+import SearchModal from './components/SearchModal'
 
 const { Sider, Content } = Layout
 
@@ -54,6 +55,8 @@ function ChatLayout() {
   const chat = useChat()
   const location = useLocation()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [highlightMsgId, setHighlightMsgId] = useState<string | null>(null)
   const { tourActive, currentStep, steps, currentStepConfig, nextStep, closeTour } = useTour()
 
   const isKb = location.pathname.startsWith('/knowledge-base')
@@ -84,6 +87,7 @@ function ChatLayout() {
             onNewConversation={chat.newConversation}
             onSwitchConversation={chat.switchConversation}
             onRemoveConversation={chat.removeConversation}
+            onSearchClick={() => setSearchOpen(true)}
           />
         </Sider>
       )}
@@ -102,6 +106,7 @@ function ChatLayout() {
               messages={chat.messages ?? []}
               isLoading={chat.isLoading ?? false}
               currentTool={chat.currentTool ?? null}
+              highlightMessageId={highlightMsgId}
               onSendChat={(msg, _files, cat, visibleMsg) => chat.sendChat(msg, cat, visibleMsg)}
               onFeedback={(msgId, rating) => chat.sendFeedback(msgId, rating)}
               onSaveExperienceSuggestion={(msgId) => chat.saveExperienceSuggestion(msgId)}
@@ -120,6 +125,17 @@ function ChatLayout() {
           onClose={closeTour}
         />
       )}
+
+      <SearchModal
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onSelectResult={(convId, msgId) => {
+          chat.switchConversation(convId)
+          setHighlightMsgId(msgId)
+          // Clear highlight after animation
+          setTimeout(() => setHighlightMsgId(null), 2500)
+        }}
+      />
     </Layout>
   )
 }

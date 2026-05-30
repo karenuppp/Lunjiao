@@ -26,6 +26,7 @@ interface ChatPanelProps {
   messages: Message[]
   isLoading: boolean
   currentTool: string | null
+  highlightMessageId?: string | null
   onSendChat: (message: string, contextFiles?: ContextFile[], category?: string, visibleMessage?: string) => void
   onFeedback: (messageId: string, rating: 'up' | 'down') => void
   onSaveExperienceSuggestion?: (messageId: string) => void
@@ -95,6 +96,7 @@ const MessageItem = memo(function MessageItem({
   messagesLen,
   isLoading,
   currentTool,
+  highlightMessageId,
   onFeedback,
   onSaveExperienceSuggestion,
   onDismissExperienceSuggestion,
@@ -104,15 +106,22 @@ const MessageItem = memo(function MessageItem({
   messagesLen: number
   isLoading: boolean
   currentTool: string | null
+  highlightMessageId?: string | null
   onFeedback: (messageId: string, rating: 'up' | 'down') => void
   onSaveExperienceSuggestion?: (messageId: string) => void
   onDismissExperienceSuggestion?: (messageId: string) => void
 }) {
   const isLastAssistant = idx === messagesLen - 1 && msg.role === 'assistant'
   const showLoadingBubble = isLastAssistant && isLoading
+  const msgId = msg.message_id || msg.id
+  const isHighlighted = highlightMessageId && (msgId === highlightMessageId || msg.id === highlightMessageId)
 
   return (
-    <div key={msg.id} className={`message ${msg.role}`}>
+    <div
+      key={msg.id}
+      className={`message ${msg.role} ${isHighlighted ? 'message-highlight' : ''}`}
+      data-message-id={msgId}
+    >
       <div className="message-avatar">
         {msg.role === 'user' ? (
           <User size={16} strokeWidth={2} />
@@ -218,7 +227,7 @@ const MessageItem = memo(function MessageItem({
 })
 
 export default function ChatPanel({
-  messages, isLoading, currentTool,
+  messages, isLoading, currentTool, highlightMessageId,
   onSendChat, onFeedback,
   onSaveExperienceSuggestion, onDismissExperienceSuggestion,
 }: ChatPanelProps) {
@@ -260,6 +269,19 @@ export default function ChatPanel({
     })
     return () => { if (rafId !== undefined) cancelAnimationFrame(rafId) }
   }, [messages, isLoading])
+
+  // Scroll to highlighted message
+  useEffect(() => {
+    if (!highlightMessageId) return
+    // Delay to allow messages to render after conversation switch
+    const timer = setTimeout(() => {
+      const el = document.querySelector(`[data-message-id="${highlightMessageId}"]`)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [highlightMessageId, messages.length])
 
   useEffect(() => {
     const el = textareaRef.current
@@ -390,6 +412,7 @@ export default function ChatPanel({
                 messagesLen={messages.length}
                 isLoading={isLoading}
                 currentTool={currentTool}
+                highlightMessageId={highlightMessageId}
                 onFeedback={onFeedback}
                 onSaveExperienceSuggestion={onSaveExperienceSuggestion}
                 onDismissExperienceSuggestion={onDismissExperienceSuggestion}
