@@ -303,3 +303,57 @@
   margin-left: 4px;
   font-style: italic;
 }
+
+.experience-suggest-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: rgba(79, 70, 229, 0.04);
+  border: 1px solid rgba(79, 70, 229, 0.15);
+  font-size: 13px;
+  color: #374151;
+  flex-wrap: wrap;
+}
+
+.exp-suggest-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.exp-suggest-text {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.5;
+}
+
+.exp-suggest-btn {
+  padding: 4px 14px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: none;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.exp-suggest-btn.save {
+  background: #4F46E5;
+  color: #FFF;
+}
+.exp-suggest-btn.save:hover {
+  background: #4338CA;
+}
+
+.exp-suggest-btn.ignore {
+  background: #F1F5F9;
+  color: #64748B;
+  border: 1px solid #E2E8F0;
+}
+.exp-suggest-btn.ignore:hover {
+  background: #E2E8F0;
+  color: #475569;
+}

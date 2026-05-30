@@ -13,6 +13,7 @@ interface Message {
   data_sources_used?: string[]
   message_id?: string
   feedback_rating?: 'up' | 'down'
+  experience_suggest?: { topic: string; summary: string } | null
 }
 
 interface ContextFile {
@@ -27,6 +28,8 @@ interface ChatPanelProps {
   currentTool: string | null
   onSendChat: (message: string, contextFiles?: ContextFile[], category?: string, visibleMessage?: string) => void
   onFeedback: (messageId: string, rating: 'up' | 'down') => void
+  onSaveExperienceSuggestion?: (messageId: string) => void
+  onDismissExperienceSuggestion?: (messageId: string) => void
 }
 
 let fileIdCounter = 0
@@ -93,6 +96,8 @@ const MessageItem = memo(function MessageItem({
   isLoading,
   currentTool,
   onFeedback,
+  onSaveExperienceSuggestion,
+  onDismissExperienceSuggestion,
 }: {
   msg: Message
   idx: number
@@ -100,6 +105,8 @@ const MessageItem = memo(function MessageItem({
   isLoading: boolean
   currentTool: string | null
   onFeedback: (messageId: string, rating: 'up' | 'down') => void
+  onSaveExperienceSuggestion?: (messageId: string) => void
+  onDismissExperienceSuggestion?: (messageId: string) => void
 }) {
   const isLastAssistant = idx === messagesLen - 1 && msg.role === 'assistant'
   const showLoadingBubble = isLastAssistant && isLoading
@@ -177,6 +184,34 @@ const MessageItem = memo(function MessageItem({
             )}
           </div>
         )}
+
+        {/* Experience suggestion: save/ignore buttons */}
+        {msg.role === 'assistant' && !showLoadingBubble && msg.experience_suggest && (
+          <div className="experience-suggest-banner">
+            <span className="exp-suggest-icon">💡</span>
+            <span className="exp-suggest-text">
+              是否将「{msg.experience_suggest.topic}」的经验保存到经验库？
+            </span>
+            <button
+              className="exp-suggest-btn save"
+              onClick={() => {
+                const msgId = msg.message_id || msg.id
+                onSaveExperienceSuggestion?.(msgId)
+              }}
+            >
+              保存
+            </button>
+            <button
+              className="exp-suggest-btn ignore"
+              onClick={() => {
+                const msgId = msg.message_id || msg.id
+                onDismissExperienceSuggestion?.(msgId)
+              }}
+            >
+              忽略
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -185,6 +220,7 @@ const MessageItem = memo(function MessageItem({
 export default function ChatPanel({
   messages, isLoading, currentTool,
   onSendChat, onFeedback,
+  onSaveExperienceSuggestion, onDismissExperienceSuggestion,
 }: ChatPanelProps) {
   const [input, setInput] = useState('')
   const [contextFiles, setContextFiles] = useState<ContextFile[]>([])
@@ -355,6 +391,8 @@ export default function ChatPanel({
                 isLoading={isLoading}
                 currentTool={currentTool}
                 onFeedback={onFeedback}
+                onSaveExperienceSuggestion={onSaveExperienceSuggestion}
+                onDismissExperienceSuggestion={onDismissExperienceSuggestion}
               />
             ))}
             <div ref={messagesEndRef} />

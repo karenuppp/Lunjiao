@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { DataCategory, PendingFile, UploadProgressItem, AppView, UserInfo, Message as ChatMessage } from '../types/chat'
-import { sendChatStream, isArchiveFile, uploadFilesBatchWithUser, loginUser, sendFeedback, listConversations, loadMessages, deleteConversation } from '../api/chat'
+import { sendChatStream, isArchiveFile, uploadFilesBatchWithUser, loginUser, sendFeedback, listConversations, loadMessages, deleteConversation, saveSuggestedExperience, dismissExperienceSuggestion } from '../api/chat'
 
 const STORAGE_KEY = 'zhiwei_conversations'
 
@@ -116,6 +116,7 @@ type ChatAction =
   | { type: 'SET_MESSAGE_ID'; payload: { conversationId: string; tempId: string; serverMessageId: string } }
   | { type: 'LOAD_CONVERSATIONS'; payload: { conversations: Conversation[] } }
   | { type: 'LOAD_MESSAGES'; payload: { conversationId: string; messages: ChatMessage[] } }
+  | { type: 'SET_EXPERIENCE_SUGGEST'; payload: { conversationId: string; messageId: string; suggest: { topic: string; summary: string } | null } }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -314,6 +315,23 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
         ),
       }
 
+    case 'SET_EXPERIENCE_SUGGEST':
+      return {
+        ...state,
+        conversations: state.conversations.map((c) =>
+          c.id === action.payload.conversationId
+            ? {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === action.payload.messageId || (m as any).message_id === action.payload.messageId
+                    ? { ...m, experience_suggest: action.payload.suggest }
+                    : m,
+                ),
+              }
+            : c,
+        ),
+      }
+
     default:
       return state
   }
@@ -338,6 +356,8 @@ interface ChatContextValue {
   login: (account: string, password: string) => Promise<UserInfo>
   logout: () => void
   sendFeedback: (messageId: string, rating: 'up' | 'down') => void
+  saveExperienceSuggestion: (messageId: string) => void
+  dismissExperienceSuggestion: (messageId: string) => void
 }
 
 const ChatContext = createContext<ChatContextValue | null>(null)
@@ -513,6 +533,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                     payload: { conversationId: convId!, tempId: lastMsg.id, serverMessageId: serverMsgId },
                   })
                 }
+              }
+              break
+            }
+
+            case 'experience_suggest': {
+              const serverMsgId = (data.message_id as string) || ''
+              if (serverMsgId) {
+                dispatch({
+                  type: 'SET_EXPERIENCE_SUGGEST',
+                  payload: {
+                    conversationId: convId!,
+                    messageId: serverMsgId,
+                    suggest: {
+                      topic: (data.topic as string) || '',
+                      summary: (data.summary as string) || '',
+                    },
+                  },
+                })
               }
               break
             }
@@ -708,6 +746,56 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     return { user_id: userId, role: role as 'admin' | 'user' }
   }, [])
 
+  const saveExperienceSuggestionAction = useCallback(
+    async (messageId: string) => {
+      const convId = persistedRef.current.activeConversationId
+      if (!convId) return
+      const conv = persistedRef.current.conversations.find((c) => c.id === convId)
+      if (!conv) return
+
+      // Find user message and AI message
+      const aiMsg = conv.messages.find((m) => m.id === messageId || (m as any).message_id === messageId)
+      if (!aiMsg || !(aiMsg as any).experience_suggest) return
+      const userMsg = conv.messages.filter((m) => m.role === 'user').pop()
+      if (!userMsg) return
+
+      const suggest = (aiMsg as any).experience_suggest
+      try {
+        await saveSuggestedExperience({
+          user_question: userMsg.content,
+          ai_answer: aiMsg.content,
+          user_id: localStorage.getItem('zhiwei_user_id') || 'default',
+          conv_id: convId,
+          msg_id: messageId,
+        })
+        dispatch({
+          type: 'SET_EXPERIENCE_SUGGEST',
+          payload: { conversationId: convId, messageId, suggest: null },
+        })
+      } catch (err) {
+        console.error('Save experience suggestion failed:', err)
+      }
+    },
+    [],
+  )
+
+  const dismissExperienceSuggestionAction = useCallback(
+    async (messageId: string) => {
+      const convId = persistedRef.current.activeConversationId
+      if (!convId) return
+      try {
+        await dismissExperienceSuggestion(convId)
+      } catch (err) {
+        console.error('Dismiss experience suggestion failed:', err)
+      }
+      dispatch({
+        type: 'SET_EXPERIENCE_SUGGEST',
+        payload: { conversationId: convId, messageId, suggest: null },
+      })
+    },
+    [],
+  )
+
   const sendFeedbackAction = useCallback(
     async (messageId: string, rating: 'up' | 'down') => {
       const convId = persistedRef.current.activeConversationId
@@ -746,6 +834,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     login,
     logout,
     sendFeedback: sendFeedbackAction,
+    saveExperienceSuggestion: saveExperienceSuggestionAction,
+    dismissExperienceSuggestion: dismissExperienceSuggestionAction,
   }
 
   return <ChatContext.Provider value={value}>{children}</ChatContext.Provider>
@@ -784,5 +874,7 @@ export function useChat() {
     login: ctx.login,
     logout: ctx.logout,
     sendFeedback: ctx.sendFeedback,
+    saveExperienceSuggestion: ctx.saveExperienceSuggestion,
+    dismissExperienceSuggestion: ctx.dismissExperienceSuggestion,
   }
 }

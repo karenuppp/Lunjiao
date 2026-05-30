@@ -7,6 +7,11 @@ from app.services.experience_service import (
     update_experience,
     delete_experience,
     get_available_tags,
+    approve_experience,
+    reject_experience,
+    extract_and_save,
+    dismiss_suggestion,
+    is_suggestion_dismissed,
 )
 
 router = APIRouter()
@@ -74,3 +79,61 @@ def delete_experience_api(experience_id: int):
 def get_tags():
     """Return available tags (prompt template titles)."""
     return {"tags": get_available_tags()}
+
+
+@router.post("/{experience_id}/approve")
+def approve_experience_api(experience_id: int):
+    """Approve a pending experience → active."""
+    result = approve_experience(experience_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Experience not found or not pending")
+    return {"ok": True, "experience": result.to_dict()}
+
+
+@router.post("/{experience_id}/reject")
+def reject_experience_api(experience_id: int):
+    """Reject a pending experience → delete it."""
+    result = reject_experience(experience_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Experience not found or not pending")
+    return {"ok": True}
+
+
+class ExperienceSuggestRequest(BaseModel):
+    user_question: str
+    ai_answer: str
+    user_id: str
+    conv_id: str
+    msg_id: str
+    data_sources: list[str] = []
+
+
+@router.post("/suggest")
+async def suggest_experience(req: ExperienceSuggestRequest):
+    """User confirmed a proactive suggestion → extract and save as pending."""
+    count = await extract_and_save(
+        user_question=req.user_question,
+        ai_answer=req.ai_answer,
+        user_id=req.user_id,
+        conv_id=req.conv_id,
+        msg_id=req.msg_id,
+        data_sources=req.data_sources,
+    )
+    return {"ok": True, "extracted": count}
+
+
+class ExperienceDismissRequest(BaseModel):
+    conv_id: str
+
+
+@router.post("/suggest/dismiss")
+def dismiss_suggestion_api(req: ExperienceDismissRequest):
+    """Mark a conversation's experience suggestion as dismissed."""
+    dismiss_suggestion(req.conv_id)
+    return {"ok": True}
+
+
+@router.get("/suggest/dismissed/{conv_id}")
+def check_dismissed(conv_id: str):
+    """Check if suggestion was already dismissed for this conversation."""
+    return {"dismissed": is_suggestion_dismissed(conv_id)}

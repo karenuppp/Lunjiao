@@ -550,6 +550,47 @@ export async function setUserQueryPermission(
   }
 }
 
+export async function approveExperience(expId: number): Promise<{ ok: boolean }> {
+  const res = await fetch(`${BASE_URL}/experiences/${expId}/approve`, { method: 'POST' })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function rejectExperience(expId: number): Promise<{ ok: boolean }> {
+  const res = await fetch(`${BASE_URL}/experiences/${expId}/reject`, { method: 'POST' })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export interface ExperienceSuggestPayload {
+  user_question: string
+  ai_answer: string
+  user_id: string
+  conv_id: string
+  msg_id: string
+  data_sources?: string[]
+}
+
+export async function saveSuggestedExperience(payload: ExperienceSuggestPayload): Promise<{ ok: boolean; extracted: number }> {
+  const res = await fetch(`${BASE_URL}/experiences/suggest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function dismissExperienceSuggestion(convId: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`${BASE_URL}/experiences/suggest/dismiss`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ conv_id: convId }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
 export async function submitOpinion(content: string): Promise<{ ok: boolean }> {
   const res = await fetch(`${BASE_URL}/opinion`, {
     method: 'POST',

@@ -176,7 +176,7 @@ async def _check_semantic_duplicate(content: str, user_id: str) -> Optional[Expe
         exp = db.query(Experience).filter(
             Experience.user_id == user_id,
             Experience.title == title,
-            Experience.status == ExperienceStatus.active,
+            Experience.status.in_([ExperienceStatus.active, ExperienceStatus.pending]),
         ).first()
         return exp
     finally:
@@ -374,7 +374,7 @@ async def extract_and_save(
                 source_msg_id=msg_id,
                 tags=valid_tags,
                 confidence=1.0,
-                status=ExperienceStatus.active,
+                status=ExperienceStatus.pending,
             )
             db.add(exp)
             db.commit()
@@ -393,6 +393,44 @@ async def extract_and_save(
         db.close()
 
     return saved_count
+
+
+def approve_experience(exp_id: int) -> Experience | None:
+    """Approve a pending experience → active, and index to vector store."""
+    db = SessionLocal()
+    try:
+        exp = db.query(Experience).filter(Experience.id == exp_id).first()
+        if not exp or exp.status != ExperienceStatus.pending:
+            return None
+        exp.status = ExperienceStatus.active
+        db.commit()
+        db.refresh(exp)
+
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(_index_experience_to_rag(exp))
+            loop.close()
+        except Exception as e:
+            print(f"[Experience] Vector indexing failed for approval exp_{exp.id}: {e}")
+
+        return exp
+    finally:
+        db.close()
+
+
+def reject_experience(exp_id: int) -> Experience | None:
+    """Reject a pending experience — delete it."""
+    db = SessionLocal()
+    try:
+        exp = db.query(Experience).filter(Experience.id == exp_id).first()
+        if not exp or exp.status != ExperienceStatus.pending:
+            return None
+        db.delete(exp)
+        db.commit()
+        return exp
+    finally:
+        db.close()
 
 
 def list_experiences(page: int = 1, page_size: int = 20,
@@ -452,3 +490,16 @@ def delete_experience(exp_id: int) -> bool:
         return True
     finally:
         db.close()
+
+
+# ── Suggestion dismissal tracking (in-memory, session lifetime) ──
+
+_dismissed_suggestions: set[str] = set()
+
+
+def is_suggestion_dismissed(conv_id: str) -> bool:
+    return conv_id in _dismissed_suggestions
+
+
+def dismiss_suggestion(conv_id: str):
+    _dismissed_suggestions.add(conv_id)

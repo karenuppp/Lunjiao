@@ -103,6 +103,8 @@ function ChatLayout() {
               currentTool={chat.currentTool ?? null}
               onSendChat={(msg, _files, cat, visibleMsg) => chat.sendChat(msg, cat, visibleMsg)}
               onFeedback={(msgId, rating) => chat.sendFeedback(msgId, rating)}
+              onSaveExperienceSuggestion={(msgId) => chat.saveExperienceSuggestion(msgId)}
+              onDismissExperienceSuggestion={(msgId) => chat.dismissExperienceSuggestion(msgId)}
             />
           )}
         </Content>

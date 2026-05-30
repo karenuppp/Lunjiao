@@ -7,6 +7,7 @@ import enum
 
 
 class ExperienceStatus(str, enum.Enum):
+    pending = "pending"
     active = "active"
     archived = "archived"
     deprecated = "deprecated"

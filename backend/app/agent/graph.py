@@ -11,6 +11,86 @@ from app.models.db_connection import DbConnection
 from app.database import SessionLocal
 
 
+# ── Experience suggestion heuristics ──
+
+_CORRECTION_PATTERNS = re.compile(
+    r"不对|不是|错误|错了|重新|再查|再找|换一个|换个|纠正|更正|不对的",
+)
+
+_KNOWLEDGE_SIGNALS = re.compile(
+    r"根据|依据|按照|规定|标准|流程|方法|步骤|规则|定义|分类|分级|公式",
+)
+
+
+def _detect_learning_moment(
+    question: str,
+    answer: str,
+    history: list[dict] | None,
+    tool_call_count: int,
+) -> dict | None:
+    """Heuristic detection of whether this Q&A pair is worth saving as experience.
+
+    Returns {"topic": str, "summary": str} if worthy, None otherwise.
+    """
+    if not answer or len(answer) < 80:
+        return None
+
+    # ── 1. Correction pattern: user corrected AI ≥2 times in this conversation ──
+    correction_count = 0
+    if history:
+        for msg in history:
+            if msg.get("role") == "user":
+                content = msg.get("content", "")
+                if _CORRECTION_PATTERNS.search(content):
+                    correction_count += 1
+
+    # ── 2. Deep exploration: ≥3 user turns + tools used ──
+    user_turns = 1  # current question counts as 1
+    if history:
+        for msg in history:
+            if msg.get("role") == "user":
+                user_turns += 1
+
+    deep_exploration = user_turns >= 3 and tool_call_count > 0
+
+    # ── 3. Knowledge signal: answer contains domain knowledge patterns ──
+    has_knowledge = bool(_KNOWLEDGE_SIGNALS.search(answer)) and len(answer) > 200
+
+    # ── Decide ──
+    triggered = False
+    reason = ""
+
+    if correction_count >= 2 and has_knowledge:
+        triggered = True
+        reason = "correction"
+    elif deep_exploration and has_knowledge:
+        triggered = True
+        reason = "deep_exploration"
+    elif correction_count >= 2 and tool_call_count > 0:
+        triggered = True
+        reason = "correction_with_tools"
+
+    if not triggered:
+        return None
+
+    # ── Extract topic from question (first 20 chars as topic label) ──
+    topic = question.strip()
+    # Try to extract key phrase
+    for phrase in ["关于", "怎么", "如何", "什么是", "是什么"]:
+        idx = topic.find(phrase)
+        if idx >= 0:
+            topic = topic[idx + len(phrase):]
+            break
+    topic = topic.strip()[:20]
+
+    # ── Summary: first 150 chars of answer ──
+    summary = answer.strip()[:150]
+    if len(answer) > 150:
+        summary += "…"
+
+    return {"topic": topic, "summary": summary, "reason": reason}
+
+
 def _load_system_prompt() -> str:
     db = SessionLocal()
     try:
@@ -196,6 +276,8 @@ async def run_agent_stream_simple(
     kb_scope: str = "personal",
     db_scope: list[int] | None = None,
     default_category: str = "",
+    conv_id: str = "",
+    exp_extract_enabled: bool = False,
 ) -> AsyncIterator[str]:
     import time as _time
     msg_id = f"msg-{int(_time.time() * 1000)}-ai"
@@ -209,6 +291,7 @@ async def run_agent_stream_simple(
         tool_schemas = get_schemas()
         data_sources_detected: list[str] = []
         final_answer = ""
+        tool_call_count = 0
         max_rounds = 5
 
         for round_idx in range(max_rounds + 1):
@@ -259,6 +342,7 @@ async def run_agent_stream_simple(
             for idx in sorted(tool_calls_buf.keys()):
                 tc = tool_calls_buf[idx]
                 func_name = tc["name"]
+                tool_call_count += 1
                 try:
                     args = json.loads(tc["args"])
                 except json.JSONDecodeError:
@@ -360,6 +444,23 @@ async def run_agent_stream_simple(
                 "final_answer",
                 {"text": "(Agent produced no text response)", "message_id": msg_id},
             )
+
+        # ── Experience suggestion: detect learning moments ──
+        if exp_extract_enabled and conv_id and final_answer:
+            suggestion = _detect_learning_moment(
+                question=question,
+                answer=final_answer,
+                history=history,
+                tool_call_count=tool_call_count,
+            )
+            if suggestion:
+                from app.services.experience_service import is_suggestion_dismissed
+                if not is_suggestion_dismissed(conv_id):
+                    yield format_sse_event("experience_suggest", {
+                        "topic": suggestion["topic"],
+                        "summary": suggestion["summary"],
+                        "message_id": msg_id,
+                    })
 
     except Exception as e:
         error_msg = f"Agent execution failed: {str(e)}"

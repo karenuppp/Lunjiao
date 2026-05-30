@@ -13,14 +13,15 @@ from app.models.user import User
 router = APIRouter()
 
 
-def _resolve_permissions(user_id: str) -> tuple[str, list[int] | None]:
-    """Resolve kb_scope / db_scope for a user from the DB.
+def _resolve_permissions(user_id: str) -> tuple[str, list[int] | None, bool]:
+    """Resolve kb_scope / db_scope / exp_extract_enabled for a user from the DB.
 
-    Returns (kb_scope, db_scope).  Defaults to ('personal', None) when
-    user_id is 'default' or the user is not found.
+    Returns (kb_scope, db_scope, exp_extract_enabled).  Defaults to
+    ('personal', None, False) when user_id is 'default' or not found.
     """
     kb_scope = "personal"
     db_scope = None
+    exp_extract_enabled = False
     if user_id and user_id != "default":
         db = SessionLocal()
         try:
@@ -33,9 +34,10 @@ def _resolve_permissions(user_id: str) -> tuple[str, list[int] | None]:
                         db_scope = json.loads(raw_db)
                     except (json.JSONDecodeError, TypeError):
                         db_scope = None
+                exp_extract_enabled = user.exp_extract_enabled or False
         finally:
             db.close()
-    return kb_scope, db_scope
+    return kb_scope, db_scope, exp_extract_enabled
 
 
 class ChatRequest(BaseModel):
@@ -81,7 +83,7 @@ async def chat(request: ChatRequest):
         for msg in request.history:
             agent_history.append(msg)
 
-    kb_scope, db_scope = _resolve_permissions(user_id)
+    kb_scope, db_scope, _exp_enabled = _resolve_permissions(user_id)
     result = run_agent_sync(
         question=request.message,
         history=agent_history or None,
@@ -119,8 +121,7 @@ async def chat_stream(request: ChatRequest):
             for msg in request.history:
                 agent_history.append(msg)
 
-        kb_scope, db_scope = _resolve_permissions(user_id)
-        kb_scope, db_scope = _resolve_permissions(user_id)
+        kb_scope, db_scope, exp_extract_enabled = _resolve_permissions(user_id)
         async for event_line in run_agent_stream_simple(
             question=request.message,
             history=agent_history or None,
@@ -128,6 +129,8 @@ async def chat_stream(request: ChatRequest):
             kb_scope=kb_scope,
             db_scope=db_scope,
             default_category=request.category or "",
+            conv_id=conv_id,
+            exp_extract_enabled=exp_extract_enabled,
         ):
             yield event_line
 

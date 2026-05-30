@@ -1,15 +1,25 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Table, Button, Modal, Select, Input, Tag, Popconfirm, Space } from 'antd'
+import { Table, Button, Modal, Select, Input, Tag, Popconfirm, Space, Tabs } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { EditOutlined, DeleteOutlined } from '@ant-design/icons'
+import { EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons'
 import {
   listExperiences,
   updateExperience,
   deleteExperience,
   getExperienceTags,
+  approveExperience,
+  rejectExperience,
   type ExperienceRecord,
 } from '../api/chat'
 import { useToast } from './Toast'
+
+const STATUS_TABS = [
+  { key: '', label: '全部' },
+  { key: 'active', label: '活跃' },
+  { key: 'pending', label: '待审核' },
+  { key: 'archived', label: '已归档' },
+  { key: 'deprecated', label: '已废弃' },
+]
 
 export default function ExpManagePage() {
   const toast = useToast()
@@ -19,6 +29,7 @@ export default function ExpManagePage() {
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
   const pageSize = 20
+  const [statusFilter, setStatusFilter] = useState('')
 
   const [availableTags, setAvailableTags] = useState<string[]>([])
 
@@ -32,7 +43,11 @@ export default function ExpManagePage() {
   const fetchExperiences = useCallback(async () => {
     setLoading(true)
     try {
-      const data = await listExperiences({ page, page_size: pageSize })
+      const data = await listExperiences({
+        page,
+        page_size: pageSize,
+        status: statusFilter || undefined,
+      })
       setExperiences(data.items)
       setTotal(data.total)
     } catch (err: any) {
@@ -40,7 +55,7 @@ export default function ExpManagePage() {
     } finally {
       setLoading(false)
     }
-  }, [page])
+  }, [page, statusFilter])
 
   const fetchTags = useCallback(async () => {
     try {
@@ -91,6 +106,26 @@ export default function ExpManagePage() {
       fetchExperiences()
     } catch (err: any) {
       toast.error('删除失败: ' + err.message)
+    }
+  }
+
+  async function handleApprove(id: number) {
+    try {
+      await approveExperience(id)
+      toast.success('审核通过，经验已激活')
+      fetchExperiences()
+    } catch (err: any) {
+      toast.error('审核失败: ' + err.message)
+    }
+  }
+
+  async function handleReject(id: number) {
+    try {
+      await rejectExperience(id)
+      toast.success('已驳回')
+      fetchExperiences()
+    } catch (err: any) {
+      toast.error('驳回失败: ' + err.message)
     }
   }
 
@@ -148,11 +183,57 @@ export default function ExpManagePage() {
       ),
     },
     {
+      title: '状态',
+      dataIndex: 'status',
+      key: 'status',
+      width: 80,
+      render: (status: string) => {
+        const map: Record<string, { color: string; label: string }> = {
+          pending: { color: 'orange', label: '待审核' },
+          active: { color: 'green', label: '活跃' },
+          archived: { color: 'default', label: '已归档' },
+          deprecated: { color: 'red', label: '废弃' },
+        }
+        const s = map[status] || { color: 'default', label: status }
+        return <Tag color={s.color}>{s.label}</Tag>
+      },
+    },
+    {
       title: '操作',
       key: 'actions',
-      width: 130,
+      width: 200,
       render: (_: unknown, record: ExperienceRecord) => (
-        <div style={{ display: 'flex', gap: 4 }}>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {record.status === 'pending' && (
+            <>
+              <Button
+                type="link"
+                size="small"
+                icon={<CheckOutlined />}
+                style={{ color: '#10B981' }}
+                onClick={() => handleApprove(record.id)}
+              >
+                通过
+              </Button>
+              <Popconfirm
+                title="确认驳回"
+                description="确定要驳回这条经验吗？会直接删除。"
+                onConfirm={() => handleReject(record.id)}
+                okText="确认驳回"
+                cancelText="取消"
+                okButtonProps={{ danger: true }}
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  danger
+                  icon={<CloseOutlined />}
+                >
+                  驳回
+                </Button>
+              </Popconfirm>
+            </>
+          )}
           <Button
             type="link"
             size="small"
@@ -186,6 +267,12 @@ export default function ExpManagePage() {
   return (
     <div style={{ height: '100%', padding: '32px', overflow: 'auto' }}>
       <div className="page-card">
+        <Tabs
+          activeKey={statusFilter}
+          onChange={(key) => { setStatusFilter(key); setPage(1); }}
+          items={STATUS_TABS.map((tab) => ({ key: tab.key, label: tab.label }))}
+          style={{ marginBottom: -8 }}
+        />
         <h3 className="page-card-heading">
           经验列表（{total}）
         </h3>
