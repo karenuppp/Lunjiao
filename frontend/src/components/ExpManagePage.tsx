@@ -266,15 +266,15 @@ export default function ExpManagePage() {
   return (
     <div style={{ height: '100%', padding: '32px', overflow: 'auto' }}>
       <div className="page-card">
+        <h3 className="page-card-heading">
+          经验列表（{total}）
+        </h3>
         <Tabs
           activeKey={statusFilter}
           onChange={(key) => { setStatusFilter(key); setPage(1); }}
           items={STATUS_TABS.map((tab) => ({ key: tab.key, label: tab.label }))}
-          style={{ marginBottom: -8 }}
+          style={{ marginTop: -12, marginBottom: -8 }}
         />
-        <h3 className="page-card-heading">
-          经验列表（{total}）
-        </h3>
         <Table
           columns={columns}
           dataSource={experiences}
