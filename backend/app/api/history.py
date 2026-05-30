@@ -18,6 +18,7 @@ class Conversation(BaseModel):
     created_at: str
     updated_at: str
     message_count: int = 0
+    user_id: str = "default"
 
 
 class Message(BaseModel):
@@ -55,17 +56,20 @@ def _write_conv(conv: dict):
         json.dump(conv, f, ensure_ascii=False, indent=2)
 
 
-def _load_all_conversations() -> list[Conversation]:
+def _load_all_conversations(user_id: str | None = None) -> list[Conversation]:
     convs = []
     for fp in sorted(_talk_dir().glob("*.json"), key=os.path.getmtime, reverse=True):
         try:
             data = json.loads(fp.read_text(encoding="utf-8"))
+            if user_id and data.get("user_id", "default") != user_id:
+                continue
             convs.append(Conversation(
                 id=data["id"],
                 title=data.get("title", "未命名对话"),
                 created_at=data.get("created_at", ""),
                 updated_at=data.get("updated_at", ""),
                 message_count=len(data.get("messages", [])),
+                user_id=data.get("user_id", "default"),
             ))
         except Exception:
             pass
@@ -93,7 +97,7 @@ def _load_messages(conv_id: str) -> list[Message]:
 class ConversationStore:
     """Persistent, file-backed conversation store shared with chat.py."""
 
-    def get_or_create(self, conv_id: str | None, title: str = "新对话") -> tuple[str, list[dict]]:
+    def get_or_create(self, conv_id: str | None, title: str = "新对话", user_id: str = "default") -> tuple[str, list[dict]]:
         if conv_id:
             data = _read_conv(conv_id)
             if data:
@@ -107,6 +111,7 @@ class ConversationStore:
             "created_at": now,
             "updated_at": now,
             "messages": [],
+            "user_id": user_id,
         }
         _write_conv(conv)
         return new_id, conv["messages"]
@@ -151,13 +156,18 @@ persistent_store = ConversationStore()
 # ── API routes ──
 
 @router.get("/")
-async def list_conversations():
-    return {"conversations": _load_all_conversations()}
+async def list_conversations(user_id: Optional[str] = None):
+    return {"conversations": _load_all_conversations(user_id)}
+
+
+class CreateConversationRequest(BaseModel):
+    title: Optional[str] = "新对话"
+    user_id: Optional[str] = "default"
 
 
 @router.post("/")
-async def create_conversation(title: Optional[str] = "新对话"):
-    conv_id, _ = persistent_store.get_or_create(None, title or "新对话")
+async def create_conversation(req: CreateConversationRequest):
+    conv_id, _ = persistent_store.get_or_create(None, req.title or "新对话", user_id=req.user_id or "default")
     data = _read_conv(conv_id)
     return Conversation(
         id=data["id"],
@@ -165,6 +175,7 @@ async def create_conversation(title: Optional[str] = "新对话"):
         created_at=data.get("created_at", ""),
         updated_at=data.get("updated_at", ""),
         message_count=len(data.get("messages", [])),
+        user_id=data.get("user_id", "default"),
     )
 
 

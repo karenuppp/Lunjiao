@@ -60,8 +60,8 @@ class ChatResponse(BaseModel):
 from app.api.history import persistent_store
 
 
-def _get_or_create_conversation(conv_id: str | None) -> tuple[str, list]:
-    return persistent_store.get_or_create(conv_id)
+def _get_or_create_conversation(conv_id: str | None, user_id: str = "default") -> tuple[str, list]:
+    return persistent_store.get_or_create(conv_id, user_id=user_id)
 
 
 def _add_to_history(conv_id: str, role: str, content: str):
@@ -71,7 +71,8 @@ def _add_to_history(conv_id: str, role: str, content: str):
 @router.post("/")
 async def chat(request: ChatRequest):
 
-    conv_id, history = _get_or_create_conversation(request.conversation_id)
+    user_id = request.user_id or "default"
+    conv_id, history = _get_or_create_conversation(request.conversation_id, user_id=user_id)
 
     agent_history = []
     for msg in history:
@@ -80,7 +81,6 @@ async def chat(request: ChatRequest):
         for msg in request.history:
             agent_history.append(msg)
 
-    user_id = request.user_id or "default"
     kb_scope, db_scope = _resolve_permissions(user_id)
     result = run_agent_sync(
         question=request.message,
@@ -106,7 +106,8 @@ async def chat(request: ChatRequest):
 
 @router.post("/stream")
 async def chat_stream(request: ChatRequest):
-    conv_id, history = _get_or_create_conversation(request.conversation_id)
+    user_id = request.user_id or "default"
+    conv_id, history = _get_or_create_conversation(request.conversation_id, user_id=user_id)
 
     async def event_generator():
         yield "event: connected\ndata: {\"conversation_id\": \"%s\"}\n\n" % conv_id
@@ -118,7 +119,7 @@ async def chat_stream(request: ChatRequest):
             for msg in request.history:
                 agent_history.append(msg)
 
-        user_id = request.user_id or "default"
+        kb_scope, db_scope = _resolve_permissions(user_id)
         kb_scope, db_scope = _resolve_permissions(user_id)
         async for event_line in run_agent_stream_simple(
             question=request.message,

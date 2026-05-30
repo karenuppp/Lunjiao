@@ -85,18 +85,19 @@ export function sendChatStream(
   return { abort: () => controller.abort() }
 }
 
-export async function listConversations(): Promise<Conversation[]> {
-  const res = await fetch(`${BASE_URL}/history/`)
+export async function listConversations(userId?: string): Promise<Conversation[]> {
+  const params = userId ? `?user_id=${encodeURIComponent(userId)}` : ''
+  const res = await fetch(`${BASE_URL}/history/${params}`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json()
   return data.conversations || []
 }
 
-export async function createConversation(title?: string): Promise<Conversation> {
+export async function createConversation(title?: string, userId?: string): Promise<Conversation> {
   const res = await fetch(`${BASE_URL}/history/`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({ title, user_id: userId || 'default' }),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()

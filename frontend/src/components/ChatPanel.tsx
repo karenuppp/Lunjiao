@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Select, Spin } from 'antd'
@@ -57,6 +57,131 @@ function getFileTypeMeta(filename: string) {
   }
 }
 
+// Debounced markdown renderer — only re-renders every 150ms during streaming
+function StreamingMarkdown({ content, streaming }: { content: string; streaming: boolean }) {
+  const [debouncedContent, setDebouncedContent] = useState(content)
+  const lastUpdateRef = useRef(Date.now())
+
+  useEffect(() => {
+    if (!streaming) {
+      setDebouncedContent(content)
+      return
+    }
+    const now = Date.now()
+    const elapsed = now - lastUpdateRef.current
+    if (elapsed >= 150) {
+      lastUpdateRef.current = now
+      setDebouncedContent(content)
+    } else {
+      const timer = setTimeout(() => {
+        lastUpdateRef.current = Date.now()
+        setDebouncedContent(content)
+      }, 150 - elapsed)
+      return () => clearTimeout(timer)
+    }
+  }, [content, streaming])
+
+  if (!debouncedContent) return null
+  return <ReactMarkdown remarkPlugins={[remarkGfm]}>{debouncedContent}</ReactMarkdown>
+}
+
+// Memoized message item — skips re-render if content/fb unchanged
+const MessageItem = memo(function MessageItem({
+  msg,
+  idx,
+  messagesLen,
+  isLoading,
+  currentTool,
+  onFeedback,
+}: {
+  msg: Message
+  idx: number
+  messagesLen: number
+  isLoading: boolean
+  currentTool: string | null
+  onFeedback: (messageId: string, rating: 'up' | 'down') => void
+}) {
+  const isLastAssistant = idx === messagesLen - 1 && msg.role === 'assistant'
+  const showLoadingBubble = isLastAssistant && isLoading
+
+  return (
+    <div key={msg.id} className={`message ${msg.role}`}>
+      <div className="message-avatar">
+        {msg.role === 'user' ? (
+          <User size={16} strokeWidth={2} />
+        ) : (
+          <Sparkles size={16} strokeWidth={2} />
+        )}
+      </div>
+
+      <div className="message-body">
+        {msg.role === 'assistant' && (msg.data_sources_used?.length ?? 0) > 0 && !showLoadingBubble && (
+          <div className="data-source-tags">
+            {msg.data_sources_used!.map((src, i) => (
+              <span key={i} className="data-source-tag">{src}</span>
+            ))}
+          </div>
+        )}
+        {showLoadingBubble && currentTool && (
+          <div className="tool-call-indicator">
+            <Loader2 size={14} className="progress-spinner" />
+            <span>{currentTool}</span>
+          </div>
+        )}
+
+        <div className={`message-bubble ${msg.role}`}>
+          {msg.role === 'user' ? (
+            <p style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{msg.content}</p>
+          ) : showLoadingBubble ? (
+            <div className="loading-cursor-area">
+              <StreamingMarkdown content={msg.content} streaming={!!msg.content} />
+              <span className="loading-cursor" />
+            </div>
+          ) : (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {msg.content}
+            </ReactMarkdown>
+          )}
+        </div>
+
+        {msg.role === 'assistant' && !showLoadingBubble && msg.content && (
+          <div className="feedback-row">
+            <button
+              className={`feedback-btn ${msg.feedback_rating === 'up' ? 'active-up' : ''}`}
+              onClick={() => {
+                const msgId = msg.message_id || msg.id
+                onFeedback(msgId, 'up')
+              }}
+              title="回答有用"
+              disabled={!!msg.feedback_rating}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 22V11M2 13v7a2 2 0 0 0 2 2h12.4a2 2 0 0 0 1.94-1.52l2.1-8.4A2 2 0 0 0 18.5 10H14V4a2 2 0 0 0-2-2l-5 9Z"/>
+              </svg>
+            </button>
+            <button
+              className={`feedback-btn ${msg.feedback_rating === 'down' ? 'active-down' : ''}`}
+              onClick={() => {
+                const msgId = msg.message_id || msg.id
+                onFeedback(msgId, 'down')
+              }}
+              title="回答需要改进"
+              disabled={!!msg.feedback_rating}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M17 2v11m5-2v-7a2 2 0 0 0-2-2H7.6a2 2 0 0 0-1.94 1.52l-2.1 8.4A2 2 0 0 0 5.5 14H10v6a2 2 0 0 0 2 2l5-9Z"/>
+              </svg>
+            </button>
+            {msg.feedback_rating === 'down' && (
+              <span className="feedback-hint">请继续与我对话，帮我纠正这个回答</span>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+})
+
 export default function ChatPanel({
   messages, isLoading, currentTool,
   onSendChat, onFeedback,
@@ -92,7 +217,12 @@ export default function ChatPanel({
   }, [])
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // Throttle scroll: use rAF and only when not in a smooth scroll already
+    let rafId: number | undefined
+    rafId = requestAnimationFrame(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
+    })
+    return () => { if (rafId !== undefined) cancelAnimationFrame(rafId) }
   }, [messages, isLoading])
 
   useEffect(() => {
@@ -216,88 +346,17 @@ export default function ChatPanel({
           </div>
         ) : (
           <>
-            {messages.map((msg, idx) => {
-              const isLastAssistant = idx === messages.length - 1 && msg.role === 'assistant'
-              const showLoadingBubble = isLastAssistant && isLoading
-              return (
-              <div key={msg.id} className={`message ${msg.role}`}>
-                <div className="message-avatar">
-                  {msg.role === 'user' ? (
-                    <User size={16} strokeWidth={2} />
-                  ) : (
-                    <Sparkles size={16} strokeWidth={2} />
-                  )}
-                </div>
-
-                <div className="message-body">
-                  {msg.role === 'assistant' && (msg.data_sources_used?.length ?? 0) > 0 && !showLoadingBubble && (
-                    <div className="data-source-tags">
-                      {msg.data_sources_used!.map((src, i) => (
-                        <span key={i} className="data-source-tag">{src}</span>
-                      ))}
-                    </div>
-                  )}
-                  {showLoadingBubble && currentTool && (
-                    <div className="tool-call-indicator">
-                      <Loader2 size={14} className="progress-spinner" />
-                      <span>{currentTool}</span>
-                    </div>
-                  )}
-
-                  <div className={`message-bubble ${msg.role}`}>
-                    {msg.role === 'user' ? (
-                      <p style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{msg.content}</p>
-                    ) : showLoadingBubble ? (
-                      <div className="loading-cursor-area">
-                        {msg.content && (
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
-                        )}
-                        <span className="loading-cursor" />
-                      </div>
-                    ) : (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {msg.content}
-                      </ReactMarkdown>
-                    )}
-                  </div>
-
-                  {msg.role === 'assistant' && !showLoadingBubble && msg.content && (
-                    <div className="feedback-row">
-                      <button
-                        className={`feedback-btn ${msg.feedback_rating === 'up' ? 'active-up' : ''}`}
-                        onClick={() => {
-                          const msgId = msg.message_id || msg.id
-                          onFeedback(msgId, 'up')
-                        }}
-                        title="回答有用"
-                        disabled={!!msg.feedback_rating}
-                      >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M7 22V11M2 13v7a2 2 0 0 0 2 2h12.4a2 2 0 0 0 1.94-1.52l2.1-8.4A2 2 0 0 0 18.5 10H14V4a2 2 0 0 0-2-2l-5 9Z"/>
-                        </svg>
-                      </button>
-                      <button
-                        className={`feedback-btn ${msg.feedback_rating === 'down' ? 'active-down' : ''}`}
-                        onClick={() => {
-                          const msgId = msg.message_id || msg.id
-                          onFeedback(msgId, 'down')
-                        }}
-                        title="回答需要改进"
-                        disabled={!!msg.feedback_rating}
-                      >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M17 2v11m5-2v-7a2 2 0 0 0-2-2H7.6a2 2 0 0 0-1.94 1.52l-2.1 8.4A2 2 0 0 0 5.5 14H10v6a2 2 0 0 0 2 2l5-9Z"/>
-                        </svg>
-                      </button>
-                      {msg.feedback_rating === 'down' && (
-                        <span className="feedback-hint">请继续与我对话，帮我纠正这个回答</span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </div>
-              )
-            })}
+            {messages.map((msg, idx) => (
+              <MessageItem
+                key={msg.id}
+                msg={msg}
+                idx={idx}
+                messagesLen={messages.length}
+                isLoading={isLoading}
+                currentTool={currentTool}
+                onFeedback={onFeedback}
+              />
+            ))}
             <div ref={messagesEndRef} />
           </>
         )}

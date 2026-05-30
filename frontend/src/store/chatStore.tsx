@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { DataCategory, PendingFile, UploadProgressItem, AppView, UserInfo, Message as ChatMessage } from '../types/chat'
-import { sendChatStream, isArchiveFile, uploadFilesBatchWithUser, loginUser, sendFeedback } from '../api/chat'
+import { sendChatStream, isArchiveFile, uploadFilesBatchWithUser, loginUser, sendFeedback, listConversations, loadMessages, deleteConversation } from '../api/chat'
 
 const STORAGE_KEY = 'zhiwei_conversations'
 
@@ -114,6 +114,8 @@ type ChatAction =
   | { type: 'LOGOUT' }
   | { type: 'SET_MESSAGE_FEEDBACK'; payload: { conversationId: string; messageId: string; rating: 'up' | 'down' } }
   | { type: 'SET_MESSAGE_ID'; payload: { conversationId: string; tempId: string; serverMessageId: string } }
+  | { type: 'LOAD_CONVERSATIONS'; payload: { conversations: Conversation[] } }
+  | { type: 'LOAD_MESSAGES'; payload: { conversationId: string; messages: ChatMessage[] } }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -299,6 +301,19 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       }
     }
 
+    case 'LOAD_CONVERSATIONS':
+      return { ...state, conversations: action.payload.conversations }
+
+    case 'LOAD_MESSAGES':
+      return {
+        ...state,
+        conversations: state.conversations.map((c) =>
+          c.id === action.payload.conversationId
+            ? { ...c, messages: action.payload.messages }
+            : c,
+        ),
+      }
+
     default:
       return state
   }
@@ -332,10 +347,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const abortRef = useRef<(() => void) | null>(null)
 
   const persistedRef = useRef(state)
-  persistedRef.current = state
+  const lastSaveRef = useRef(0)
+
+  // Persist to localStorage on state change, throttled to once per 3s
   useEffect(() => {
-    saveToStorage(persistedRef.current)
+    persistedRef.current = state
+    const now = Date.now()
+    if (now - lastSaveRef.current < 3000) return
+    lastSaveRef.current = now
+    saveToStorage(state)
   })
+
+  // Final save on unmount / when conversations change settles
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveToStorage(persistedRef.current)
+    }, 3500)
+    return () => clearTimeout(timer)
+  }, [state.conversations, state.activeConversationId])
 
   const newConversation = useCallback(() => {
     if (abortRef.current) abortRef.current()
@@ -362,13 +391,32 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'NEW_CONVERSATION', payload: { id, title: '新对话' } })
   }, [])
 
-  const switchConversation = useCallback((id: string | null) => {
+  const switchConversation = useCallback(async (id: string | null) => {
     if (abortRef.current) abortRef.current()
     dispatch({ type: 'SWITCH_CONVERSATION', payload: { id } })
+
+    // Lazy-load messages from server if not already loaded
+    if (id) {
+      const conv = persistedRef.current.conversations.find((c) => c.id === id)
+      if (conv && conv.messages.length === 0) {
+        try {
+          const data = await loadMessages(id)
+          const msgs = (data.messages || []) as ChatMessage[]
+          dispatch({ type: 'LOAD_MESSAGES', payload: { conversationId: id, messages: msgs } })
+        } catch (err) {
+          console.error('Failed to load messages:', err)
+        }
+      }
+    }
   }, [])
 
-  const removeConversation = useCallback((id: string) => {
+  const removeConversation = useCallback(async (id: string) => {
     dispatch({ type: 'REMOVE_CONVERSATION', payload: id })
+    try {
+      await deleteConversation(id)
+    } catch (err) {
+      console.error('Failed to delete conversation on server:', err)
+    }
   }, [])
 
   const setCategory = useCallback((cat: DataCategory[]) => {
@@ -643,6 +691,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('zhiwei_user_id', userId)
     localStorage.setItem('zhiwei_role', role)
     dispatch({ type: 'LOGIN', payload: { userId, role } })
+
+    // Load user's conversations from server
+    try {
+      const serverConvs = await listConversations(userId)
+      const conversations: Conversation[] = serverConvs.map((c) => ({
+        id: c.id,
+        title: c.title || '未命名对话',
+        messages: [],
+      }))
+      dispatch({ type: 'LOAD_CONVERSATIONS', payload: { conversations } })
+    } catch (err) {
+      console.error('Failed to load conversations from server:', err)
+    }
+
     return { user_id: userId, role: role as 'admin' | 'user' }
   }, [])
 
