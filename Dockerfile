@@ -12,6 +12,14 @@ RUN npm run build
 FROM python:3.11-slim
 WORKDIR /app
 
+# LibreOffice: required by MinerU to convert Office docs (DOCX/PPT) → PDF before parsing
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        libreoffice-core \
+        libreoffice-writer \
+        libreoffice-impress \
+    && rm -rf /var/lib/apt/lists/*
+
 # 若需图表中文渲染，在目标服务器执行：
 # docker exec <container> apt-get update && apt-get install -y fonts-noto-cjk
 

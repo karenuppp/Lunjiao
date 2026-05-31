@@ -109,7 +109,7 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
 
 async def _index_file_local(file_id: str, file_path: str, file_name: str, category: str, user_id: str = "default") -> tuple[str, int, str]:
     try:
-        doc_id = await rag.index_file(
+        doc_id, chunk_count = await rag.index_file(
             file_path=file_path,
             file_name=file_name,
             category=category,
@@ -117,7 +117,7 @@ async def _index_file_local(file_id: str, file_path: str, file_name: str, catego
         )
         if not doc_id:
             return "failed", 0, "文件内容为空或解析失败"
-        return "indexed", 1, ""
+        return "indexed", chunk_count, ""
     except Exception as e:
         error_msg = str(e) if str(e) else type(e).__name__
         print(f"[Upload] RAG indexing error for {file_name}: {error_msg}")

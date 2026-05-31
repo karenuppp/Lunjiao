@@ -150,7 +150,7 @@ class RAGEngineAdapter:
     async def index_file(
         self, file_path: str, file_name: str | None = None,
         category: str = "", user_id: str = "default"
-    ) -> str:
+    ) -> tuple[str, int]:
         await self._ensure_ready(user_id)
         user_rag = self._rags[user_id]
 
@@ -167,10 +167,10 @@ class RAGEngineAdapter:
                     text_content = f.read()
                 if not text_content.strip():
                     print(f"[RAG-Anything] Empty file: {file_path}")
-                    return ""
+                    return "", 0
             except Exception as e:
                 print(f"[RAG-Anything] Read error for {file_path}: {e}")
-                return ""
+                return "", 0
 
         elif ext in (".xlsx", ".xls"):
             try:
@@ -188,60 +188,38 @@ class RAGEngineAdapter:
                 wb.close()
                 if not text_content.strip():
                     print(f"[RAG-Anything] Empty Excel file: {file_path}")
-                    return ""
+                    return "", 0
                 print(
                     f"[RAG-Anything] Extracted Excel {file_name or Path(file_path).name}: "
                     f"{len(lines)} lines, {len(text_content)} chars"
                 )
             except Exception as e:
                 print(f"[RAG-Anything] Excel extraction error for {file_path}: {e}")
-                return ""
+                return "", 0
 
+        chunk_count = 0
         if text_content is not None:
+            # Use insert_text_content for full LightRAG pipeline:
+            # chunking → entity extraction → relation graph → vector index
+            from raganything.utils import insert_text_content
             try:
-                lightrag = user_rag.lightrag
-            except AttributeError as e:
-                print(f"[RAG-Anything] LightRAG not initialized for user {user_id}: {e}")
-                return ""
-            paragraphs = [p.strip() for p in text_content.split('\n\n') if p.strip()]
-            text_chunks = []
-            for para in paragraphs:
-                if len(para) > 2000:
-                    for line in para.split('\n'):
-                        line = line.strip()
-                        if line:
-                            text_chunks.append(line)
-                else:
-                    text_chunks.append(para)
-
-            doc_key = hashlib.md5(text_content.encode()).hexdigest()[:16]
-
-            try:
-                await lightrag.full_docs.upsert(
-                    {doc_key: {"content": text_content, "file_path": file_path}}
+                split_char = '\n\n' if ext in ('.txt', '.md') else None
+                await insert_text_content(
+                    lightrag=user_rag.lightrag,
+                    input=text_content,
+                    ids=doc_id,
+                    file_paths=file_path,
+                    split_by_character=split_char,
                 )
-
-                inserting_chunks = {}
-                for idx, chunk_text in enumerate(text_chunks):
-                    chunk_key = hashlib.md5(chunk_text.encode()).hexdigest()[:16]
-                    inserting_chunks[chunk_key] = {
-                        "content": chunk_text,
-                        "full_doc_id": doc_key,
-                        "tokens": len(chunk_text.split()),
-                        "chunk_order_index": idx,
-                        "file_path": file_path,
-                    }
-
-                await lightrag.chunks_vdb.upsert(inserting_chunks)
-                await lightrag.text_chunks.upsert(inserting_chunks)
-                await lightrag._insert_done()
             except Exception as e:
-                print(f"[RAG-Anything] LightRAG upsert error for {file_name or Path(file_path).name}: {e}")
-                raise RuntimeError(f"向量索引写入失败: {e}") from e
+                print(f"[RAG-Anything] insert_text_content error for {file_name or Path(file_path).name}: {e}")
+                raise RuntimeError(f"文本索引写入失败: {e}") from e
 
+            # Estimate chunk count (LightRAG ~1200 tokens ≈ 500-600 chars per chunk)
+            chunk_count = max(1, len(text_content) // 500)
             print(
-                f"[RAG-Anything] Direct-inserted {file_name or Path(file_path).name} "
-                f"({len(text_content)} chars) via LightRAG"
+                f"[RAG-Anything] Full-pipeline indexed {file_name or Path(file_path).name} "
+                f"({len(text_content)} chars, ~{chunk_count} chunks)"
             )
         else:
             try:
@@ -252,11 +230,17 @@ class RAGEngineAdapter:
                 )
             except Exception as e:
                 print(f"[RAG-Anything] Error indexing {file_path}: {e}")
-                return ""
+                return "", 0
+            # Rough estimate for MinerU-parsed documents
+            try:
+                file_size = os.path.getsize(file_path)
+                chunk_count = max(1, file_size // 500)
+            except Exception:
+                chunk_count = 1
 
         # Store mapping in-memory (keyed by user_id + file_name)
         _doc_id_map[f"{user_id}:{file_name or Path(file_path).name}"] = f"{category}::{doc_id}"
-        return doc_id
+        return doc_id, chunk_count
 
     async def search(
         self, query_text: str, category: str | None = None, top_k: int = 3,
@@ -274,8 +258,8 @@ class RAGEngineAdapter:
                 )
 
             param = QueryParam(
-                mode="naive",
-                only_need_context=True,
+                mode="mix",
+                only_need_context=False,
                 top_k=settings.rag_chunk_top_k,
                 chunk_top_k=settings.rag_chunk_top_k,
                 enable_rerank=False,
@@ -329,8 +313,8 @@ class RAGEngineAdapter:
         from lightrag.base import QueryParam
 
         param = QueryParam(
-            mode="naive",
-            only_need_context=True,
+            mode="mix",
+            only_need_context=False,
             top_k=settings.rag_chunk_top_k,
             chunk_top_k=settings.rag_chunk_top_k,
             enable_rerank=False,
@@ -393,10 +377,21 @@ class RAGEngineAdapter:
 
     async def remove_file(self, doc_id: str, user_id: str = "default") -> bool:
         await self._ensure_ready(user_id)
-        # RAGAnything doesn't expose a direct remove API through its public interface.
-        # We log it for now.
-        print(f"[RAG-Anything] File removal requested for {doc_id} (not yet implemented)")
-        return True
+        lightrag = self._rags[user_id].lightrag
+        try:
+            result = await lightrag.adelete_by_doc_id(doc_id)
+            if result.status == "success":
+                print(f"[RAG-Anything] Deleted doc {doc_id}: {result.message}")
+                return True
+            elif result.status == "not_found":
+                print(f"[RAG-Anything] Doc {doc_id} not found in RAG storage, treating as deleted")
+                return True
+            else:
+                print(f"[RAG-Anything] Deletion failed for {doc_id}: {result.message}")
+                return False
+        except Exception as e:
+            print(f"[RAG-Anything] Error deleting {doc_id}: {e}")
+            return False
 
 
 rag = RAGEngineAdapter()
