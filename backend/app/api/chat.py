@@ -84,7 +84,7 @@ async def chat(request: ChatRequest):
             agent_history.append(msg)
 
     kb_scope, db_scope, _exp_enabled = _resolve_permissions(user_id)
-    result = run_agent_sync(
+    result = await run_agent_sync(
         question=request.message,
         history=agent_history or None,
         user_id=user_id,
@@ -112,8 +112,6 @@ async def chat_stream(request: ChatRequest):
     conv_id, history = _get_or_create_conversation(request.conversation_id, user_id=user_id)
 
     async def event_generator():
-        yield "event: connected\ndata: {\"conversation_id\": \"%s\"}\n\n" % conv_id
-
         agent_history = []
         for msg in history:
             agent_history.append(msg)

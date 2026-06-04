@@ -487,17 +487,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         },
         (eventType, data) => {
           switch (eventType) {
+            // New typed event name + legacy compat
+            case 'text_delta':
             case 'token':
               dispatch({
                 type: 'APPEND_STREAMING',
-                payload: { conversationId: convId!, text: (data.text as string) || '' },
+                payload: { conversationId: convId!, text: (data.delta as string) || (data.text as string) || '' },
               })
+              break
+
+            case 'reply_start':
+              // New event: agent reply started. conversation_id already set.
+              // Ignore for now — future: use for AG-UI rendering.
               break
 
             case 'tool_call_start':
               dispatch({
                 type: 'SET_CURRENT_TOOL',
-                payload: (data.label as string) || (data.tool as string) || '',
+                payload: (data.tool_label as string) || (data.label as string) || (data.tool_name as string) || (data.tool as string) || '',
               })
               break
 

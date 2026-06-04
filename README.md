@@ -161,6 +161,24 @@ docker run -d --name zhiwei --network host \
 /admin/experience   → 经验管理（管理员）
 ```
 
+## Agent 设计
+
+ReAct Agent 采用原生 OpenAI SDK，无 LangChain/LangGraph 依赖。核心模块：
+
+- **`agent/agent.py`** — ReActAgent 类，支持同步和流式两种模式，参数通过 `AgentConfig` 注入（非硬编码）
+- **`agent/events.py`** — 类型化事件系统（`AgentEvent` 基类 + 8 种具体事件），遵循 AG-UI 命名规范。事件对象通过 `to_sse()` 序列化为 SSE 传输格式
+- **`agent/config.py`** — `ReActConfig`（最大轮数、温度、流式开关）+ `AgentConfig`，替代硬编码常量
+- **`agent/graph.py`** — 薄封装层，保持向后兼容，将 `AgentEvent` 转为 SSE 字符串
+- **`agent/tools.py`** — Tool schema 定义 + 执行（RAG 检索、SQL 查询等）
+
+流式模式下，Agent 逐轮产出以下事件：
+
+```
+reply_start → (text_delta* | tool_call_start → tool_call_end)* → data_source → final_answer
+```
+
+当 `exp_extract_enabled` 为 true 时，Agent 还在 `final_answer` 后检测是否值得提取经验并产出 `experience_suggest` 事件。
+
 ## Agent 工具
 
 | 工具 | 功能 |
