@@ -487,7 +487,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         },
         (eventType, data) => {
           switch (eventType) {
-            // New typed event name + legacy compat
             case 'text_delta':
             case 'token':
               dispatch({

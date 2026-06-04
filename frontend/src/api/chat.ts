@@ -79,6 +79,7 @@ export function sendChatStream(
     .catch((err) => {
       if (!controller.signal.aborted && err.name !== 'AbortError') {
         console.error('Stream error:', err)
+        onMessage('error', { message: err.message || String(err) || '流式连接失败' })
       }
     })
 

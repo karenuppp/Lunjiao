@@ -11,6 +11,7 @@ from typing import AsyncIterator, Optional, Any
 
 from app.agent.agent import ReActAgent, build_messages
 from app.agent.config import AgentConfig
+from app.agent.events import AgentEvent
 
 
 # ── SSE formatting (backward-compat) ────────────────────────────────────────
@@ -18,6 +19,7 @@ from app.agent.config import AgentConfig
 def format_sse_event(event_type: str, data: Any) -> str:
     """Legacy SSE formatter. Prefer AgentEvent.to_sse() in new code."""
     return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
 
 async def run_agent_sync(
     question: str,
@@ -52,11 +54,11 @@ async def run_agent_stream_simple(
     default_category: str = "",
     conv_id: str = "",
     exp_extract_enabled: bool = False,
-) -> AsyncIterator[str]:
-    """Streaming: yield SSE-formatted strings.
+) -> AsyncIterator[AgentEvent]:
+    """Streaming: yield typed AgentEvent objects.
 
-    Delegates to ReActAgent.run_stream() and converts each typed
-    AgentEvent to SSE wire format via event.to_sse().
+    Caller converts to SSE via ``event.to_sse()``. This lets the caller
+    inspect events (e.g. to capture the final answer for persistence).
     """
     agent = ReActAgent()
     async for event in agent.run_stream(
@@ -69,4 +71,4 @@ async def run_agent_stream_simple(
         conv_id=conv_id,
         exp_extract_enabled=exp_extract_enabled,
     ):
-        yield event.to_sse()
+        yield event

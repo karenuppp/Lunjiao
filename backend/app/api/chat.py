@@ -7,6 +7,7 @@ import traceback
 from starlette.responses import StreamingResponse
 
 from app.agent.graph import run_agent_sync, run_agent_stream_simple
+from app.agent.events import FinalAnswerEvent, DataSourceEvent, ErrorEvent
 from app.database import SessionLocal
 from app.models.user import User
 
@@ -120,19 +121,33 @@ async def chat_stream(request: ChatRequest):
                 agent_history.append(msg)
 
         kb_scope, db_scope, exp_extract_enabled = _resolve_permissions(user_id)
-        async for event_line in run_agent_stream_simple(
-            question=request.message,
-            history=agent_history or None,
-            user_id=user_id,
-            kb_scope=kb_scope,
-            db_scope=db_scope,
-            default_category=request.category or "",
-            conv_id=conv_id,
-            exp_extract_enabled=exp_extract_enabled,
-        ):
-            yield event_line
+        final_answer = ""
+        data_sources: list[str] = []
+        try:
+            async for event in run_agent_stream_simple(
+                question=request.message,
+                history=agent_history or None,
+                user_id=user_id,
+                kb_scope=kb_scope,
+                db_scope=db_scope,
+                default_category=request.category or "",
+                conv_id=conv_id,
+                exp_extract_enabled=exp_extract_enabled,
+            ):
+                if isinstance(event, FinalAnswerEvent):
+                    final_answer = event.text
+                elif isinstance(event, DataSourceEvent):
+                    data_sources = event.sources
+                yield event.to_sse()
+        except Exception as e:
+            yield ErrorEvent(message=f"流式响应异常: {e}").to_sse()
+            traceback.print_exc()
 
         _add_to_history(conv_id, "user", request.message)
+        if final_answer:
+            msg_id = persistent_store.add_message(conv_id, "assistant", final_answer)
+            if data_sources and msg_id:
+                persistent_store.set_message_sources(conv_id, msg_id, data_sources)
 
     return StreamingResponse(
         event_generator(),

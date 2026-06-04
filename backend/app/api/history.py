@@ -116,12 +116,13 @@ class ConversationStore:
         _write_conv(conv)
         return new_id, conv["messages"]
 
-    def add_message(self, conv_id: str, role: str, content: str):
+    def add_message(self, conv_id: str, role: str, content: str) -> str | None:
         data = _read_conv(conv_id)
         if not data:
-            return
+            return None
+        msg_id = f"msg-{len(data['messages']) + 1:03d}"
         data["messages"].append({
-            "id": f"msg-{len(data['messages']) + 1:03d}",
+            "id": msg_id,
             "role": role,
             "content": content,
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -131,6 +132,7 @@ class ConversationStore:
         if len(data["messages"]) <= 1:
             data["title"] = content[:80]
         _write_conv(data)
+        return msg_id
 
     def delete(self, conv_id: str) -> bool:
         p = _conv_path(conv_id)
