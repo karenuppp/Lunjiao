@@ -8,6 +8,7 @@ export interface Message {
   created_at?: string
   message_id?: string
   feedback_rating?: 'up' | 'down'
+  template_name?: string
 }
 
 export interface Conversation {

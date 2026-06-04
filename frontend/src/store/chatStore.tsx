@@ -340,7 +340,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
 interface ChatContextValue {
   state: ChatState
   dispatch: React.Dispatch<ChatAction>
-  sendChat: (message: string, category?: string, visibleMessage?: string) => void
+  sendChat: (message: string, category?: string, visibleMessage?: string, templateName?: string) => void
   newConversation: () => void
   switchConversation: (id: string | null) => void
   removeConversation: (id: string) => void
@@ -444,7 +444,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const sendChat = useCallback(
-    (message: string, category?: string, visibleMessage?: string) => {
+    (message: string, category?: string, visibleMessage?: string, templateName?: string) => {
       if (!message.trim() || state.isLoading) return
 
       let convId = state.activeConversationId
@@ -462,6 +462,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         id: `msg-${Date.now()}-user`,
         role: 'user',
         content: displayContent,
+        template_name: templateName || undefined,
       }
       dispatch({ type: 'ADD_MESSAGE', payload: { conversationId: convId, message: userMsg } })
 

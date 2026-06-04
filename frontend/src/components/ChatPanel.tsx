@@ -14,6 +14,7 @@ interface Message {
   message_id?: string
   feedback_rating?: 'up' | 'down'
   experience_suggest?: { topic: string; summary: string } | null
+  template_name?: string
 }
 
 interface ContextFile {
@@ -131,6 +132,12 @@ const MessageItem = memo(function MessageItem({
       </div>
 
       <div className="message-body">
+        {msg.role === 'user' && msg.template_name && (
+          <div className="template-tag">
+            <FileText size={11} />
+            <span>{msg.template_name}</span>
+          </div>
+        )}
         {msg.role === 'assistant' && (msg.data_sources_used?.length ?? 0) > 0 && !showLoadingBubble && (
           <div className="data-source-tags">
             {msg.data_sources_used!.map((src, i) => (
