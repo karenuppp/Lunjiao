@@ -28,7 +28,8 @@ frontend/dist/
 .hermes/
 
 # Docs (not source code)
-docs/
+docs/*
+!docs/TECHNICAL.md
 
 # OS
 .DS_Store

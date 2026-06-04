@@ -100,3 +100,7 @@ All settings from environment variables via `python-dotenv`. Defaults assume loc
 - Admin pages (`/admin/users`, `/admin/database`, `/admin/prompt`) only accessible to users with `role: "admin"`.
 - File uploads go to `backend/uploads/` by default (configurable via `UPLOAD_DIR`).
 - RAG engine (`backend/app/rag_engine.py`) wraps RAGAnything + LightRAG. Provides `search()`, `search_text()`, `insert()`, `delete()` methods, all taking `user_id` for isolation.
+
+## Documentation maintenance
+
+When modifying functionality or adjusting architecture, **must** update `docs/TECHNICAL.md`. This is the core technical reference for non-technical maintainers. Check §14 checklist before committing.

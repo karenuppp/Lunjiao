@@ -2,6 +2,8 @@
 
 面向部门级的自然语言数据查询与分析工具。用户用中文提问，系统自动检索知识库文档和数据库，生成回答。
 
+> **核心技术文档：[docs/TECHNICAL.md](docs/TECHNICAL.md)** —— Agent 引擎、SSE 事件系统、前后端连接、完整数据流、配置参考。适合非技术背景维护者阅读。每次改代码后必须同步更新。
+
 ## 核心特性
 
 - **ReAct Agent**: 原生 OpenAI Function Calling，无 LangChain/LangGraph 依赖
