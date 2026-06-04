@@ -36,7 +36,7 @@
 ```
 
 - **前端**: React 18 + TypeScript + Ant Design 5 + Vite
-- **后端**: Python 3.11 + FastAPI + SSE 流式
+- **后端**: Python 3.12 + FastAPI + SSE 流式
 - **Agent**: 原生 OpenAI SDK — ReAct 循环 + Function Calling（无 LangChain/LangGraph）
 - **LLM**: OpenAI-compatible API（本地 LM Studio / vLLM / 任意兼容服务）
 - **Embedding**: text-embedding-nomic-embed-text-v1.5 (768 维)
@@ -46,7 +46,7 @@
 
 ### 前置条件
 
-- Python 3.11+, Node.js 22+
+- Python 3.12+, Node.js 22+
 - 本地 LLM 服务（OpenAI-compatible API，默认 `localhost:1234/v1`）
 - MySQL（默认 `localhost:3306`，库名 `zhiwei`）
 
