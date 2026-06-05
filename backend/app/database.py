@@ -62,7 +62,6 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     _migrate()
 
-    # Ensure default system prompt exists
     from app.agent.prompts import DEFAULT_SYSTEM_PROMPT
     from app.models.system_prompt import SystemPrompt
     db = SessionLocal()
@@ -75,11 +74,11 @@ def init_db():
                 prompt_content=DEFAULT_SYSTEM_PROMPT,
             ))
             db.commit()
+            print("[Init] Seeded '默认提示词' (default)")
         elif not existing.title:
             existing.title = "默认提示词"
             db.commit()
 
-        # Ensure "系统默认" template exists (empty content, modifiable, not deletable)
         sys_default = db.query(SystemPrompt).filter(SystemPrompt.prompt_key == "system_default").first()
         if sys_default is None:
             db.add(SystemPrompt(
@@ -88,5 +87,11 @@ def init_db():
                 prompt_content="",
             ))
             db.commit()
+            print("[Init] Seeded '系统默认' (system_default)")
+
+        total = db.query(SystemPrompt).count()
+        print(f"[Init] system_prompt table has {total} row(s)")
+    except Exception as e:
+        print(f"[Init] Seed failed: {e}")
     finally:
         db.close()
