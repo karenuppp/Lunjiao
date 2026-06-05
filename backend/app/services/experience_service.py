@@ -4,10 +4,9 @@ import json
 import hashlib
 import asyncio
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
-from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.database import SessionLocal
@@ -373,8 +372,6 @@ async def extract_and_save(
     if not extracted:
         return 0
 
-    available_tags = get_available_tags()
-
     saved_count = 0
     db = SessionLocal()
     try:
@@ -386,9 +383,7 @@ async def extract_and_save(
             if not title or not content:
                 continue
 
-            valid_tags = [t for t in tags if t in available_tags]
-            if not valid_tags and available_tags:
-                valid_tags = [available_tags[0]]
+            valid_tags = ["系统默认"]
 
             dup = await _check_semantic_duplicate(content, user_id)
             if dup:

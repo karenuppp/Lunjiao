@@ -7,6 +7,7 @@ import {
   LogoutOutlined,
   QuestionCircleOutlined,
   MessageOutlined,
+  ClockCircleOutlined,
 } from '@ant-design/icons'
 import { useChat } from '../store/chatStore'
 import { useTour } from '../store/tourStore'
@@ -33,6 +34,7 @@ export default function AppHeader({
   const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [feedbackContent, setFeedbackContent] = useState('')
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
+  const [changelogOpen, setChangelogOpen] = useState(false)
 
   const handleLogout = () => {
     chat.logout()
@@ -153,6 +155,14 @@ export default function AppHeader({
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div
           className="help-btn-box"
+          onClick={() => setChangelogOpen(true)}
+          title="更新日志"
+        >
+          <ClockCircleOutlined style={{ color: '#4F46E5' }} />
+          <span style={{ color: '#4F46E5', fontSize: 13 }}>更新日志</span>
+        </div>
+        <div
+          className="help-btn-box"
           onClick={handleStartTour}
           title="使用说明"
         >
@@ -197,6 +207,33 @@ export default function AppHeader({
             >
               提交
             </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        title="更新日志"
+        open={changelogOpen}
+        onCancel={() => setChangelogOpen(false)}
+        footer={null}
+        width={640}
+        destroyOnClose
+      >
+        <div style={{ marginTop: 8, maxHeight: 460, overflowY: 'auto', lineHeight: 1.8, fontSize: 14 }}>
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, color: '#4F46E5', marginBottom: 4, fontSize: 15 }}>v0.2</div>
+            <div style={{ fontWeight: 600, color: '#1a1b2e', marginBottom: 6 }}>2026-06-05</div>
+            <ul style={{ margin: 0, paddingLeft: 20, color: '#4b5563' }}>
+              <li>新增对话记录搜索功能，可按关键词快速定位过往问答</li>
+              <li>新增对话内容标签区分，便于提取经验后归类</li>
+              <li>修复点赞优质回答不能自动提取为经验的问题</li>
+              <li>修复对话框中上传文件出错的问题</li>
+              <li>修复连续长时间对话页面卡顿的问题</li>
+              <li>优化智能问答底层逻辑</li>
+              <li>优化多个对话窗口同时回复</li>
+              <li>优化经验管理页面布局</li>
+            </ul>
+            <div style={{ marginTop: 12, color: '#9CA3AF', fontSize: 13 }}>开发：XXX</div>
           </div>
         </div>
       </Modal>

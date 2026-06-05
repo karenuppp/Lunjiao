@@ -28,7 +28,8 @@ interface ContextFile {
 
 interface ChatPanelProps {
   messages: Message[]
-  isLoading: boolean
+  loadingConversationIds: string[]
+  activeConversationId: string | null
   currentTool: string | null
   highlightMessageId?: string | null
   onSendChat: (message: string, contextFiles?: ContextFile[], category?: string, visibleMessage?: string, systemPrompt?: string) => void
@@ -238,7 +239,7 @@ const MessageItem = memo(function MessageItem({
 })
 
 export default function ChatPanel({
-  messages, isLoading, currentTool, highlightMessageId,
+  messages, loadingConversationIds, activeConversationId, currentTool, highlightMessageId,
   onSendChat, onFeedback,
   onSaveExperienceSuggestion, onDismissExperienceSuggestion,
   uploadFile,
@@ -257,6 +258,8 @@ export default function ChatPanel({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const contextFilesRef = useRef<ContextFile[]>([])
   contextFilesRef.current = contextFiles
+
+  const isThisConversationLoading = activeConversationId !== null && loadingConversationIds.includes(activeConversationId)
 
   // Load templates on mount
   useEffect(() => {
@@ -282,7 +285,7 @@ export default function ChatPanel({
       messagesEndRef.current?.scrollIntoView({ behavior: 'auto' })
     })
     return () => { if (rafId !== undefined) cancelAnimationFrame(rafId) }
-  }, [messages, isLoading])
+  }, [messages, isThisConversationLoading])
 
   // Scroll to highlighted message
   useEffect(() => {
@@ -306,7 +309,7 @@ export default function ChatPanel({
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId)
   const anyFileUploading = contextFiles.some(cf => cf.status === 'uploading')
-  const canSend = (input.trim().length > 0 || contextFiles.length > 0) && !isLoading && !anyFileUploading
+  const canSend = (input.trim().length > 0 || contextFiles.length > 0) && !isThisConversationLoading && !anyFileUploading
 
   const startFileUpload = useCallback(async (cf: ContextFile) => {
     if (!uploadFile) {
@@ -440,7 +443,7 @@ export default function ChatPanel({
   return (
     <div className="chat-area">
       <div className="chat-messages">
-        {messages.length === 0 && !isLoading ? (
+        {messages.length === 0 && !isThisConversationLoading ? (
           <div className="chat-empty">
             <img src="/logo-circle.png" alt="知微" style={{ width: 56, height: 56, marginBottom: '16px' }} />
             <p style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 600, color: '#0F172A', fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
@@ -458,7 +461,7 @@ export default function ChatPanel({
                 msg={msg}
                 idx={idx}
                 messagesLen={messages.length}
-                isLoading={isLoading}
+                isLoading={isThisConversationLoading}
                 currentTool={currentTool}
                 highlightMessageId={highlightMessageId}
                 onFeedback={onFeedback}
@@ -509,7 +512,7 @@ export default function ChatPanel({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             rows={1}
-            disabled={isLoading}
+            disabled={isThisConversationLoading}
           />
           <input
             ref={fileInputRef}
@@ -521,7 +524,7 @@ export default function ChatPanel({
           <button
             className="attach-btn"
             onClick={handlePaperclipClick}
-            disabled={isLoading}
+            disabled={isThisConversationLoading}
             title="添加文件（最多10个，每个10MB）"
           >
             <Paperclip size={18} strokeWidth={1.8} />

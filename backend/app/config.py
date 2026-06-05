@@ -35,6 +35,7 @@ class Settings:
     rag_chunk_top_k: int = int(os.getenv("RAG_CHUNK_TOP_K", "5"))
     rag_cosine_threshold: float = float(os.getenv("RAG_COSINE_THRESHOLD", "0.3"))
     rag_max_context_tokens: int = int(os.getenv("RAG_MAX_CONTEXT_TOKENS", "1200"))
+    rag_query_timeout: float = float(os.getenv("RAG_QUERY_TIMEOUT", "30"))
 
     mcp_server_base: str = os.getenv("MCP_SERVER_BASE", "http://localhost:8024")
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import re
 import time as _time
-from typing import AsyncIterator, Optional, Any
+from typing import AsyncIterator
 
 from openai import AsyncOpenAI
 from openai.types.chat import ChatCompletionMessageParam

@@ -3,6 +3,11 @@ import { Input } from 'antd'
 import { Search, X } from 'lucide-react'
 import { searchMessages, type SearchResult } from '../api/chat'
 
+function escapeHtml(text: string): string {
+  const map: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }
+  return text.replace(/[&<>"']/g, c => map[c])
+}
+
 interface SearchModalProps {
   open: boolean
   onClose: () => void
@@ -110,8 +115,8 @@ export default function SearchModal({ open, onClose, onSelectResult }: SearchMod
                       <div
                         className="search-result-excerpt"
                         dangerouslySetInnerHTML={{
-                          __html: r.excerpt.replace(
-                            new RegExp(r.keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
+                          __html: escapeHtml(r.excerpt).replace(
+                            new RegExp(escapeHtml(r.keyword).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
                             (m) => `<mark>${m}</mark>`,
                           ),
                         }}

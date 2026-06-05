@@ -1,5 +1,4 @@
 from __future__ import annotations
-from typing import Any, Optional
 import json
 import asyncio
 
@@ -29,10 +28,16 @@ async def query_rag(query_text: str, category: str = "", top_k: int = 5,
         return list(results) if results else []
 
     try:
-        all_results = await _do_search(user_id)
+        all_results = await asyncio.wait_for(
+            _do_search(user_id),
+            timeout=settings.rag_query_timeout + 5,
+        )
 
         if include_public and user_id != "default":
-            public_results = await _do_search("default")
+            public_results = await asyncio.wait_for(
+                _do_search("default"),
+                timeout=settings.rag_query_timeout + 5,
+            )
             seen = {r.get("text", "") for r in all_results}
             for r in public_results:
                 if r.get("text", "") not in seen:
@@ -55,6 +60,8 @@ async def query_rag(query_text: str, category: str = "", top_k: int = 5,
             )
         return "\n\n".join(formatted_parts)
 
+    except asyncio.TimeoutError:
+        return "知识库检索超时，可能嵌入服务未启动，请稍后重试或联系管理员。"
     except Exception as e:
         return f"[RAG Engine Error] {str(e)}"
 
@@ -231,9 +238,6 @@ async def find_file_by_name(keyword: str, user_id: str = "default") -> str:
     The keyword is matched against file names case-insensitively as a
     substring search. The first matching file's content is returned.
     """
-    from app.database import SessionLocal
-    from app.models.user import User
-
     upload_dir = Path(settings.upload_dir)
     if not upload_dir.exists():
         return "未找到上传目录。"

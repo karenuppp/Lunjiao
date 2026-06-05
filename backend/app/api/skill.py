@@ -165,8 +165,6 @@ description: 简要描述这个技能的功能（一句话）
 请确保生成的 skill 内容完整、专业、可直接使用。只输出 skill 的 markdown 内容，不要加额外的说明。
 """
 
-    import asyncio
-
     try:
         from openai import AsyncOpenAI
         from app.config import settings

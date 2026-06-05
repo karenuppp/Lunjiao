@@ -6,19 +6,11 @@ all existing callers (chat.py API routes, tests, etc.).
 
 from __future__ import annotations
 
-import json
-from typing import AsyncIterator, Optional, Any
+from typing import AsyncIterator
 
 from app.agent.agent import ReActAgent, build_messages
 from app.agent.config import AgentConfig
 from app.agent.events import AgentEvent
-
-
-# ── SSE formatting (backward-compat) ────────────────────────────────────────
-
-def format_sse_event(event_type: str, data: Any) -> str:
-    """Legacy SSE formatter. Prefer AgentEvent.to_sse() in new code."""
-    return f"event: {event_type}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 async def run_agent_sync(
@@ -39,7 +31,6 @@ async def run_agent_sync(
         kb_scope=kb_scope,
         db_scope=db_scope,
         default_category=default_category,
-        system_prompt=system_prompt,
     )
     return {
         "answer": answer,

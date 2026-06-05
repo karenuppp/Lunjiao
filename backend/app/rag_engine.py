@@ -264,7 +264,13 @@ class RAGEngineAdapter:
                 chunk_top_k=settings.rag_chunk_top_k,
                 enable_rerank=False,
             )
-            result_text = await lightrag.aquery(query_text, param=param)
+            result_text = await asyncio.wait_for(
+                lightrag.aquery(query_text, param=param),
+                timeout=settings.rag_query_timeout,
+            )
+        except asyncio.TimeoutError:
+            print(f"[RAG-Anything] Query timeout after {settings.rag_query_timeout}s")
+            return []
         except Exception as e:
             print(f"[RAG-Anything] Query error: {e}")
             return []
@@ -321,7 +327,13 @@ class RAGEngineAdapter:
         )
 
         try:
-            data_result = await lightrag.aquery_data(query_text, param=param)
+            data_result = await asyncio.wait_for(
+                lightrag.aquery_data(query_text, param=param),
+                timeout=settings.rag_query_timeout,
+            )
+        except asyncio.TimeoutError:
+            print(f"[RAG-Anything] aquery_data timeout after {settings.rag_query_timeout}s")
+            return []
         except Exception as e:
             print(f"[RAG-Anything] aquery_data error: {e}")
             return []

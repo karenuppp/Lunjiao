@@ -104,7 +104,8 @@ function ChatLayout() {
           ) : (
             <ChatPanel
               messages={chat.messages ?? []}
-              isLoading={chat.isLoading ?? false}
+              loadingConversationIds={chat.loadingConversationIds ?? []}
+              activeConversationId={chat.activeConversationId ?? null}
               currentTool={chat.currentTool ?? null}
               highlightMessageId={highlightMsgId}
               onSendChat={(msg, _files, cat, visibleMsg, sysPrompt) => chat.sendChat(msg, cat, visibleMsg, cat, sysPrompt)}

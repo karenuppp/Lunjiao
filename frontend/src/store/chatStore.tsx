@@ -46,7 +46,7 @@ interface Conversation {
 interface ChatState {
   conversations: Conversation[]
   activeConversationId: string | null
-  isLoading: boolean
+  loadingConversationIds: string[]
   selectedCategory: DataCategory[]
   currentTool: string | null
   uploadedFiles: UploadedFileMeta[]
@@ -69,7 +69,7 @@ interface UploadedFileMeta {
 const initialState: ChatState = {
   conversations: [],
   activeConversationId: null,
-  isLoading: false,
+  loadingConversationIds: [],
   selectedCategory: ['全部'],
   currentTool: null,
   uploadedFiles: [],
@@ -96,7 +96,7 @@ type ChatAction =
   | { type: 'ADD_MESSAGE'; payload: { conversationId: string; message: ChatMessage } }
   | { type: 'APPEND_STREAMING'; payload: { conversationId: string; text: string } }
   | { type: 'FINALIZE_STREAMING'; payload: { conversationId: string; finalText: string; dataSources?: string[] } }
-  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_LOADING'; payload: string | null }
   | { type: 'SET_CURRENT_TOOL'; payload: string | null }
   | { type: 'SET_CATEGORY'; payload: DataCategory[] }
   | { type: 'REMOVE_CONVERSATION'; payload: string }
@@ -173,7 +173,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       const { conversationId, finalText, dataSources } = action.payload
       return {
         ...state,
-        isLoading: false,
+        loadingConversationIds: state.loadingConversationIds.filter(id => id !== conversationId),
         currentTool: null,
         conversations: state.conversations.map((conv) => {
           if (conv.id !== conversationId) return conv
@@ -198,8 +198,11 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       }
     }
 
-    case 'SET_LOADING':
-      return { ...state, isLoading: action.payload }
+    case 'SET_LOADING': {
+      const cid = action.payload
+      if (state.loadingConversationIds.includes(cid)) return state
+      return { ...state, loadingConversationIds: [...state.loadingConversationIds, cid] }
+    }
 
     case 'SET_CURRENT_TOOL':
       return { ...state, currentTool: action.payload }
@@ -364,7 +367,7 @@ const ChatContext = createContext<ChatContextValue | null>(null)
 
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(chatReducer, mergedInitial)
-  const abortRef = useRef<(() => void) | null>(null)
+  const abortMapRef = useRef<Map<string, () => void>>(new Map())
 
   const persistedRef = useRef(state)
   const lastSaveRef = useRef(0)
@@ -387,7 +390,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [state.conversations, state.activeConversationId])
 
   const newConversation = useCallback(() => {
-    if (abortRef.current) abortRef.current()
     const id = `conv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     // Auto-title the previous conversation with the first user message's first 10 chars
@@ -395,7 +397,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     for (let i = prevConvs.length - 1; i >= 0; i--) {
       const conv = prevConvs[i]
       if (conv.title && conv.title !== '新对话') continue
-
 
       const firstUserMsg = conv.messages.find((m) => m.role === 'user' && m.content)
       if (firstUserMsg) {
@@ -412,7 +413,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const switchConversation = useCallback(async (id: string | null) => {
-    if (abortRef.current) abortRef.current()
     dispatch({ type: 'SWITCH_CONVERSATION', payload: { id } })
 
     // Lazy-load messages from server if not already loaded
@@ -445,8 +445,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const sendChat = useCallback(
     (message: string, category?: string, visibleMessage?: string, templateName?: string, systemPrompt?: string) => {
-      if (!message.trim() || state.isLoading) return
-
       let convId = state.activeConversationId
       if (!convId) {
         convId = `conv-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
@@ -454,6 +452,13 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           type: 'NEW_CONVERSATION',
           payload: { id: convId, title: (visibleMessage || message).slice(0, 30) },
         })
+      }
+
+      // If THIS conversation already streaming, abort old stream first
+      if (!message.trim()) return
+      if (state.loadingConversationIds.includes(convId)) {
+        const oldAbort = abortMapRef.current.get(convId)
+        if (oldAbort) { oldAbort(); abortMapRef.current.delete(convId) }
       }
 
       // Show only visible message in UI (template hidden)
@@ -474,7 +479,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         },
       })
 
-      dispatch({ type: 'SET_LOADING', payload: true })
+      dispatch({ type: 'SET_LOADING', payload: convId })
 
       const dataSources: string[] = []
 
@@ -532,6 +537,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                   dataSources: dataSources.length > 0 ? dataSources : undefined,
                 },
               })
+              abortMapRef.current.delete(convId!)
               if (serverMsgId) {
                 const conv = persistedRef.current.conversations.find(c => c.id === convId)
                 const lastMsg = conv?.messages[conv.messages.length - 1]
@@ -567,14 +573,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             case 'error':
               console.error('Stream error:', data.message)
               dispatch({ type: 'FINALIZE_STREAMING', payload: { conversationId: convId!, finalText: `抱歉，处理出错了: ${data.message || '未知错误'}` } })
+              abortMapRef.current.delete(convId!)
               break
           }
         }
       )
 
-      abortRef.current = controller.abort
+      abortMapRef.current.set(convId!, controller.abort)
     },
-    [state.isLoading, state.activeConversationId]
+    [state.loadingConversationIds, state.activeConversationId]
   )
 
   const uploadFile = useCallback(async (file: File, userId?: string): Promise<UploadedFileMeta | null> => {
@@ -724,7 +731,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem('zhiwei_user_id')
     localStorage.removeItem('zhiwei_role')
-    if (abortRef.current) abortRef.current()
+    abortMapRef.current.forEach(abort => abort())
+    abortMapRef.current.clear()
     dispatch({ type: 'LOGOUT' })
   }, [])
 
@@ -857,7 +865,7 @@ export function useChat() {
   return {
     messages: ctx.state.conversations.find((c) => c.id === ctx.state.activeConversationId)?.messages ?? [],
     conversations: ctx.state.conversations,
-    isLoading: ctx.state.isLoading,
+    loadingConversationIds: ctx.state.loadingConversationIds,
     activeConversationId: ctx.state.activeConversationId,
     selectedCategory: ctx.state.selectedCategory,
     currentTool: ctx.state.currentTool,

@@ -1,7 +1,6 @@
 from __future__ import annotations
 import json
 import re
-from typing import List, Optional
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 

@@ -58,13 +58,6 @@ class TextDeltaEvent(AgentEvent):
 
 
 @dataclass
-class ThinkingDeltaEvent(AgentEvent):
-    """Thinking/reasoning text delta. AG-UI: THINKING_BLOCK_DELTA."""
-    event_type: str = "thinking_delta"
-    delta: str = ""
-
-
-@dataclass
 class ToolCallStartEvent(AgentEvent):
     """Tool execution begins. AG-UI: TOOL_CALL_START."""
     event_type: str = "tool_call_start"
