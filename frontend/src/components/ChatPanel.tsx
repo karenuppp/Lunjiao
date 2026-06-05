@@ -270,11 +270,12 @@ export default function ChatPanel({
         const data = await listPromptTemplates()
         if (!cancelled) {
           setTemplates(data)
-          // Auto-select "系统默认" template
-          const systemDefault = data.find(t => t.title === '系统默认' || t.prompt_key === 'system_default')
+          const systemDefault = data.find(t => t.prompt_key === 'default')
           if (systemDefault) setSelectedTemplateId(systemDefault.id)
         }
-      } catch { }
+      } catch (err) {
+        console.error('加载提示词模板失败:', err)
+      }
       finally {
         if (!cancelled) setTemplatesLoading(false)
       }

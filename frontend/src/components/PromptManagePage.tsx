@@ -138,23 +138,19 @@ export default function PromptManagePage() {
           </Button>
           <Popconfirm
             title="确认删除"
-            description={
-              record.prompt_key === 'default' || record.prompt_key === 'system_default'
-                ? '该提示词模板不可删除'
-                : `确定要删除提示词「${record.title}」吗？`
-            }
+            description={record.prompt_key === 'default' ? '系统默认提示词不可删除' : `确定要删除提示词「${record.title}」吗？`}
             onConfirm={() => handleDelete(record.id)}
             okText="确认删除"
             cancelText="取消"
             okButtonProps={{ danger: true }}
-            disabled={record.prompt_key === 'default' || record.prompt_key === 'system_default'}
+            disabled={record.prompt_key === 'default'}
           >
             <Button
               type="link"
               size="small"
               danger
               icon={<DeleteOutlined />}
-              disabled={record.prompt_key === 'default' || record.prompt_key === 'system_default'}
+              disabled={record.prompt_key === 'default'}
             >
               删除
             </Button>

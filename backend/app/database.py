@@ -62,7 +62,6 @@ def init_db():
     Base.metadata.create_all(bind=engine)
     _migrate()
 
-    from app.agent.prompts import DEFAULT_SYSTEM_PROMPT
     from app.models.system_prompt import SystemPrompt
     db = SessionLocal()
     try:
@@ -70,24 +69,25 @@ def init_db():
         if existing is None:
             db.add(SystemPrompt(
                 prompt_key="default",
-                title="默认提示词",
-                prompt_content=DEFAULT_SYSTEM_PROMPT,
-            ))
-            db.commit()
-            print("[Init] Seeded '默认提示词' (default)")
-        elif not existing.title:
-            existing.title = "默认提示词"
-            db.commit()
-
-        sys_default = db.query(SystemPrompt).filter(SystemPrompt.prompt_key == "system_default").first()
-        if sys_default is None:
-            db.add(SystemPrompt(
-                prompt_key="system_default",
                 title="系统默认",
                 prompt_content="",
             ))
             db.commit()
-            print("[Init] Seeded '系统默认' (system_default)")
+            print("[Init] Seeded '系统默认' (default)")
+        else:
+            # Migrate: old "默认提示词" → "系统默认", clear content
+            if existing.title != "系统默认" or existing.prompt_content != "":
+                existing.title = "系统默认"
+                existing.prompt_content = ""
+                db.commit()
+                print("[Init] Migrated existing default → '系统默认' (empty)")
+
+        # Clean up legacy system_default key
+        legacy = db.query(SystemPrompt).filter(SystemPrompt.prompt_key == "system_default").first()
+        if legacy:
+            db.delete(legacy)
+            db.commit()
+            print("[Init] Removed legacy system_default template")
 
         total = db.query(SystemPrompt).count()
         print(f"[Init] system_prompt table has {total} row(s)")
