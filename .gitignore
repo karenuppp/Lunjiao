@@ -42,3 +42,15 @@ opinions/
 
 # Logs
 *.log
+
+# Playwright / test artifacts
+.playwright-mcp/
+
+# Runtime conversation data
+talk/
+
+# Tarballs
+*.tar
+
+# Temp files
+CLAUDE.original.md

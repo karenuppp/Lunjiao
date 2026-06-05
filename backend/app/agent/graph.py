@@ -28,16 +28,18 @@ async def run_agent_sync(
     kb_scope: str = "personal",
     db_scope: list[int] | None = None,
     default_category: str = "",
+    system_prompt: str = "",
 ) -> dict:
     """Non-streaming: build messages, run ReAct loop, return {answer, data_sources_used}."""
     agent = ReActAgent()
-    messages = await build_messages(question, history, user_id=user_id)
+    messages = await build_messages(question, history, user_id=user_id, system_prompt=system_prompt)
     answer, data_sources_used = await agent.run_sync(
         messages,
         user_id=user_id,
         kb_scope=kb_scope,
         db_scope=db_scope,
         default_category=default_category,
+        system_prompt=system_prompt,
     )
     return {
         "answer": answer,
@@ -54,6 +56,7 @@ async def run_agent_stream_simple(
     default_category: str = "",
     conv_id: str = "",
     exp_extract_enabled: bool = False,
+    system_prompt: str = "",
 ) -> AsyncIterator[AgentEvent]:
     """Streaming: yield typed AgentEvent objects.
 
@@ -70,5 +73,6 @@ async def run_agent_stream_simple(
         default_category=default_category,
         conv_id=conv_id,
         exp_extract_enabled=exp_extract_enabled,
+        system_prompt=system_prompt,
     ):
         yield event

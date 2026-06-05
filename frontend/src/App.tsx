@@ -107,10 +107,11 @@ function ChatLayout() {
               isLoading={chat.isLoading ?? false}
               currentTool={chat.currentTool ?? null}
               highlightMessageId={highlightMsgId}
-              onSendChat={(msg, _files, cat, visibleMsg) => chat.sendChat(msg, cat, visibleMsg, cat)}
+              onSendChat={(msg, _files, cat, visibleMsg, sysPrompt) => chat.sendChat(msg, cat, visibleMsg, cat, sysPrompt)}
               onFeedback={(msgId, rating) => chat.sendFeedback(msgId, rating)}
               onSaveExperienceSuggestion={(msgId) => chat.saveExperienceSuggestion(msgId)}
               onDismissExperienceSuggestion={(msgId) => chat.dismissExperienceSuggestion(msgId)}
+              uploadFile={(file) => chat.uploadFile(file)}
             />
           )}
         </Content>

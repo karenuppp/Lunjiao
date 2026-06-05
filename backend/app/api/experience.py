@@ -106,6 +106,7 @@ class ExperienceSuggestRequest(BaseModel):
     conv_id: str
     msg_id: str
     data_sources: list[str] = []
+    category: str = ""
 
 
 @router.post("/suggest")
@@ -118,6 +119,7 @@ async def suggest_experience(req: ExperienceSuggestRequest):
         conv_id=req.conv_id,
         msg_id=req.msg_id,
         data_sources=req.data_sources,
+        category=req.category,
     )
     return {"ok": True, "extracted": count}
 

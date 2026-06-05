@@ -31,7 +31,7 @@ EXTRACTION_PROMPT = """\
 用户问题：{user_question}
 AI 回答：{ai_answer}
 使用的数据源：{data_sources}
-
+{category_hint}
 可用标签（必须从中选择）：{available_tags}
 
 请以 JSON 格式返回提取的经验：
@@ -58,6 +58,7 @@ async def _llm_extract_experiences(
     user_question: str,
     ai_answer: str,
     data_sources: list[str],
+    category: str = "",
 ) -> list[dict]:
     from openai import AsyncOpenAI
 
@@ -65,10 +66,17 @@ async def _llm_extract_experiences(
     if not available_tags:
         available_tags = ["默认提示词"]
 
+    category_hint = ""
+    if category and category in available_tags:
+        category_hint = f"此对话使用的提示词模板/类别为：{category}。优先使用该标签。\n"
+    elif category:
+        category_hint = f"此对话使用的提示词模板/类别为：{category}。\n"
+
     prompt = EXTRACTION_PROMPT.format(
         user_question=user_question,
         ai_answer=ai_answer,
         data_sources=", ".join(data_sources) if data_sources else "无",
+        category_hint=category_hint,
         available_tags=", ".join(available_tags),
     )
 
@@ -85,15 +93,16 @@ async def _llm_extract_experiences(
                 {"role": "user", "content": prompt},
             ],
             temperature=0.2,
-            max_tokens=2048,
+            max_tokens=4096,
         )
         content = response.choices[0].message.content or ""
     except Exception as e:
         print(f"[Experience] LLM extraction call failed: {e}")
         return []
 
+    # Parse LLM response — try direct, code block, then truncated recovery
+    result = None
     try:
-        # Try direct parse first
         result = json.loads(content)
     except json.JSONDecodeError:
         # Try to extract from code block
@@ -102,11 +111,34 @@ async def _llm_extract_experiences(
             try:
                 result = json.loads(match.group(1))
             except json.JSONDecodeError:
-                print(f"[Experience] Failed to parse extraction response: {content[:300]}")
+                pass
+
+    # Truncated JSON recovery: close incomplete strings + braces/brackets
+    if result is None:
+        truncated = content.strip()
+        if truncated and truncated[0] in ('{', '['):
+            # Check if inside an unclosed string (odd unescaped quotes)
+            in_string = False
+            i = 0
+            while i < len(truncated):
+                if truncated[i] == '\\':
+                    i += 2
+                    continue
+                if truncated[i] == '"':
+                    in_string = not in_string
+                i += 1
+            if in_string:
+                truncated += '"'
+            open_braces = truncated.count('{') - truncated.count('}')
+            open_brackets = truncated.count('[') - truncated.count(']')
+            truncated += ']' * max(0, open_brackets)
+            truncated += '}' * max(0, open_braces)
+            try:
+                result = json.loads(truncated)
+                print(f"[Experience] Recovered truncated JSON")
+            except json.JSONDecodeError:
+                print(f"[Experience] JSON parse failed even after recovery, raw: {content[:300]}")
                 return []
-        else:
-            print(f"[Experience] No JSON found in extraction response: {content[:300]}")
-            return []
 
     if not result.get("should_save", False):
         return []
@@ -329,11 +361,13 @@ async def extract_and_save(
     conv_id: str,
     msg_id: str,
     data_sources: list[str] | None = None,
+    category: str = "",
 ) -> int:
     extracted = await _llm_extract_experiences(
         user_question=user_question,
         ai_answer=ai_answer,
         data_sources=data_sources or [],
+        category=category,
     )
 
     if not extracted:

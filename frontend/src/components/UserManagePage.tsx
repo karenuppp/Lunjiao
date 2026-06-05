@@ -45,7 +45,6 @@ export default function UserManagePage() {
   const [permUserId, setPermUserId] = useState<number | null>(null)
   const [permKbScope, setPermKbScope] = useState('personal')
   const [permDbScope, setPermDbScope] = useState<number[]>([])
-  const [permExtractEnabled, setPermExtractEnabled] = useState(false)
   const [permSubmitting, setPermSubmitting] = useState(false)
   const [dbConnections, setDbConnections] = useState<DbConnectionRecord[]>([])
   const [dbLoading, setDbLoading] = useState(false)
@@ -144,7 +143,6 @@ export default function UserManagePage() {
     setPermModalOpen(true)
     setPermKbScope('personal')
     setPermDbScope([])
-    setPermExtractEnabled(false)
     setDbLoading(true)
 
     try {
@@ -154,7 +152,6 @@ export default function UserManagePage() {
       ])
       setPermKbScope(perm.kb_scope || 'personal')
       setPermDbScope(perm.db_scope || [])
-      setPermExtractEnabled(perm.exp_extract_enabled || false)
       setDbConnections(conns)
     } catch (err: any) {
       toast.error(err.message || '加载权限信息失败')
@@ -170,7 +167,6 @@ export default function UserManagePage() {
       await setUserQueryPermission(permUserId, {
         kb_scope: permKbScope,
         db_scope: permDbScope.length > 0 ? permDbScope : null,
-        exp_extract_enabled: permExtractEnabled,
       })
       toast.success('修改成功')
       setPermModalOpen(false)
@@ -179,6 +175,24 @@ export default function UserManagePage() {
       toast.error(err.message || '保存权限失败')
     } finally {
       setPermSubmitting(false)
+    }
+  }
+
+  const handleToggleExtract = async (userId: number, enabled: boolean) => {
+    // Optimistic update
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, exp_extract_enabled: enabled } : u))
+    try {
+      // Need current kb_scope/db_scope — grab from state
+      const user = users.find(u => u.id === userId)
+      await setUserQueryPermission(userId, {
+        kb_scope: user?.kb_scope || 'personal',
+        db_scope: user?.db_scope || null,
+        exp_extract_enabled: enabled,
+      })
+    } catch (err: any) {
+      // Revert on failure
+      setUsers(prev => prev.map(u => u.id === userId ? { ...u, exp_extract_enabled: !enabled } : u))
+      toast.error(err.message || '修改失败')
     }
   }
 
@@ -199,6 +213,16 @@ export default function UserManagePage() {
     {
       title: '知识库范围', dataIndex: 'kb_scope', key: 'kb_scope', width: 120,
       render: (scope: string) => KB_SCOPE_LABELS[scope] || scope,
+    },
+    {
+      title: '经验提取', dataIndex: 'exp_extract_enabled', key: 'exp_extract_enabled', width: 90,
+      render: (enabled: boolean, record: UserRecord) => (
+        <Switch
+          size="small"
+          checked={enabled}
+          onChange={(val) => handleToggleExtract(record.id, val)}
+        />
+      ),
     },
     {
       title: '操作', key: 'action', width: 250,
@@ -384,19 +408,6 @@ export default function UserManagePage() {
                 <Radio value="personal" disabled>个人知识库</Radio>
                 <Radio value="none">不授权</Radio>
               </Radio.Group>
-            </div>
-
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ marginBottom: 8, fontWeight: 600, fontSize: 14 }}>经验提取</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <Switch
-                  checked={permExtractEnabled}
-                  onChange={setPermExtractEnabled}
-                />
-                <span style={{ fontSize: 13, color: '#6b7280' }}>
-                  允许该用户的 👍 操作触发经验提取
-                </span>
-              </div>
             </div>
 
             <div style={{ marginBottom: 8 }}>

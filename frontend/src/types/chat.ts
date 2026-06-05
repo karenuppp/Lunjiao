@@ -9,6 +9,7 @@ export interface Message {
   message_id?: string
   feedback_rating?: 'up' | 'down'
   template_name?: string
+  experience_suggest?: { topic: string; summary: string; category?: string } | null
 }
 
 export interface Conversation {

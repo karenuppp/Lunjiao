@@ -43,6 +43,7 @@ def _resolve_permissions(user_id: str) -> tuple[str, list[int] | None, bool]:
 
 class ChatRequest(BaseModel):
     message: str
+    system_prompt: Optional[str] = None  # Template content — prepended to system message
     conversation_id: Optional[str] = None
     data_category: Optional[List[str]] = None  # e.g. ["人事", "设备"]
     data_sources: Optional[List[str]] = None
@@ -67,8 +68,8 @@ def _get_or_create_conversation(conv_id: str | None, user_id: str = "default") -
     return persistent_store.get_or_create(conv_id, user_id=user_id)
 
 
-def _add_to_history(conv_id: str, role: str, content: str):
-    persistent_store.add_message(conv_id, role, content)
+def _add_to_history(conv_id: str, role: str, content: str, template_name: str = ""):
+    persistent_store.add_message(conv_id, role, content, template_name=template_name)
 
 
 @router.post("/")
@@ -92,6 +93,7 @@ async def chat(request: ChatRequest):
         kb_scope=kb_scope,
         db_scope=db_scope,
         default_category=request.category or "",
+        system_prompt=request.system_prompt or "",
     )
 
     _add_to_history(conv_id, "user", request.message)
@@ -133,6 +135,7 @@ async def chat_stream(request: ChatRequest):
                 default_category=request.category or "",
                 conv_id=conv_id,
                 exp_extract_enabled=exp_extract_enabled,
+                system_prompt=request.system_prompt or "",
             ):
                 if isinstance(event, FinalAnswerEvent):
                     final_answer = event.text
@@ -143,7 +146,7 @@ async def chat_stream(request: ChatRequest):
             yield ErrorEvent(message=f"流式响应异常: {e}").to_sse()
             traceback.print_exc()
 
-        _add_to_history(conv_id, "user", request.message)
+        _add_to_history(conv_id, "user", request.message, template_name=request.category or "")
         if final_answer:
             msg_id = persistent_store.add_message(conv_id, "assistant", final_answer)
             if data_sources and msg_id:
@@ -186,11 +189,13 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
 
             user_question = ""
             ai_answer = ""
+            template_name = ""
             for msg in reversed(history):
                 if msg["role"] == "assistant" and not ai_answer:
                     ai_answer = msg["content"]
                 elif msg["role"] == "user" and not user_question:
                     user_question = msg["content"]
+                    template_name = msg.get("template_name", "")
                 if user_question and ai_answer:
                     break
 
@@ -202,7 +207,13 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
                     user_id=user_id,
                     conv_id=conv_id,
                     msg_id=request.message_id,
+                    category=template_name,
                 )
+            else:
+                print(f"[Feedback] Q&A not found for conv={conv_id}, msg={request.message_id}")
+
+    # Persist feedback rating to conversation file so it survives re-login
+    persistent_store.set_message_feedback(request.conversation_id, request.message_id, request.rating)
 
     return {"ok": True, "rating": request.rating}
 
@@ -213,7 +224,9 @@ def _extract_experiences_bg(
     user_id: str,
     conv_id: str,
     msg_id: str,
+    category: str = "",
 ):
+    print(f"[Feedback] BG task started for user {user_id}")
     try:
         import asyncio
         from app.services.experience_service import extract_and_save
@@ -228,8 +241,14 @@ def _extract_experiences_bg(
                     user_id=user_id,
                     conv_id=conv_id,
                     msg_id=msg_id,
+                    category=category,
                 )
             )
+            # Cancel pending daemon tasks (LightRAG workers) before closing loop
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
             print(f"[Feedback] Extracted {count} experience(s) for user {user_id}")
         finally:
             loop.close()

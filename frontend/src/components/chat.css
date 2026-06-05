@@ -225,6 +225,11 @@
 
 .cf-size { color: #9CA3AF; flex-shrink: 0; letter-spacing: -0.2px; }
 
+.cf-status { color: #9CA3AF; flex-shrink: 0; font-size: 11px; }
+.cf-status-error { color: #EF4444; }
+
+.context-file-chip.cf-error { border-color: #FECACA; background: #FFF5F5; }
+
 .cf-remove {
   background: none; border: none; color: #9CA3AF; cursor: pointer;
   padding: 2px; border-radius: 3px; line-height: 1; transition: all 0.15s ease;

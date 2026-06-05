@@ -312,12 +312,13 @@ export interface UserRecord {
   role: string
   kb_scope: string
   db_scope: number[] | null
+  exp_extract_enabled: boolean
 }
 
 export interface QueryPermission {
   kb_scope: string
   db_scope: number[] | null
-  exp_extract_enabled: boolean
+  exp_extract_enabled?: boolean
 }
 
 export async function listUsers(): Promise<UserRecord[]> {
@@ -570,6 +571,7 @@ export interface ExperienceSuggestPayload {
   conv_id: string
   msg_id: string
   data_sources?: string[]
+  category?: string
 }
 
 export async function saveSuggestedExperience(payload: ExperienceSuggestPayload): Promise<{ ok: boolean; extracted: number }> {

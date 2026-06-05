@@ -27,6 +27,7 @@ class Message(BaseModel):
     content: str
     created_at: str
     data_sources_used: list[str] = []
+    feedback_rating: str | None = None
 
 
 def _talk_dir() -> Path:
@@ -88,6 +89,7 @@ def _load_messages(conv_id: str) -> list[Message]:
             content=m.get("content", ""),
             created_at=m.get("created_at", ""),
             data_sources_used=m.get("data_sources_used", []),
+            feedback_rating=m.get("feedback_rating"),
         ))
     return messages
 
@@ -116,18 +118,21 @@ class ConversationStore:
         _write_conv(conv)
         return new_id, conv["messages"]
 
-    def add_message(self, conv_id: str, role: str, content: str) -> str | None:
+    def add_message(self, conv_id: str, role: str, content: str, template_name: str = "") -> str | None:
         data = _read_conv(conv_id)
         if not data:
             return None
         msg_id = f"msg-{len(data['messages']) + 1:03d}"
-        data["messages"].append({
+        msg_entry = {
             "id": msg_id,
             "role": role,
             "content": content,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "data_sources_used": [],
-        })
+        }
+        if template_name:
+            msg_entry["template_name"] = template_name
+        data["messages"].append(msg_entry)
         data["updated_at"] = datetime.now(timezone.utc).isoformat()
         if len(data["messages"]) <= 1:
             data["title"] = content[:80]
@@ -148,6 +153,16 @@ class ConversationStore:
         for m in data.get("messages", []):
             if m.get("id") == msg_id and m.get("role") == "assistant":
                 m["data_sources_used"] = sources
+                _write_conv(data)
+                break
+
+    def set_message_feedback(self, conv_id: str, msg_id: str, rating: str):
+        data = _read_conv(conv_id)
+        if not data:
+            return
+        for m in data.get("messages", []):
+            if m.get("id") == msg_id:
+                m["feedback_rating"] = rating
                 _write_conv(data)
                 break
 

@@ -116,7 +116,7 @@ type ChatAction =
   | { type: 'SET_MESSAGE_ID'; payload: { conversationId: string; tempId: string; serverMessageId: string } }
   | { type: 'LOAD_CONVERSATIONS'; payload: { conversations: Conversation[] } }
   | { type: 'LOAD_MESSAGES'; payload: { conversationId: string; messages: ChatMessage[] } }
-  | { type: 'SET_EXPERIENCE_SUGGEST'; payload: { conversationId: string; messageId: string; suggest: { topic: string; summary: string } | null } }
+  | { type: 'SET_EXPERIENCE_SUGGEST'; payload: { conversationId: string; messageId: string; suggest: { topic: string; summary: string; category?: string } | null } }
 
 function chatReducer(state: ChatState, action: ChatAction): ChatState {
   switch (action.type) {
@@ -340,7 +340,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
 interface ChatContextValue {
   state: ChatState
   dispatch: React.Dispatch<ChatAction>
-  sendChat: (message: string, category?: string, visibleMessage?: string, templateName?: string) => void
+  sendChat: (message: string, category?: string, visibleMessage?: string, templateName?: string, systemPrompt?: string) => void
   newConversation: () => void
   switchConversation: (id: string | null) => void
   removeConversation: (id: string) => void
@@ -444,7 +444,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const sendChat = useCallback(
-    (message: string, category?: string, visibleMessage?: string, templateName?: string) => {
+    (message: string, category?: string, visibleMessage?: string, templateName?: string, systemPrompt?: string) => {
       if (!message.trim() || state.isLoading) return
 
       let convId = state.activeConversationId
@@ -470,7 +470,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         type: 'ADD_MESSAGE',
         payload: {
           conversationId: convId,
-          message: { id: `msg-${Date.now()}-ai`, role: 'assistant', content: '' },
+          message: { id: `msg-${Date.now()}-ai`, role: 'assistant', content: '', template_name: templateName || undefined },
         },
       })
 
@@ -485,6 +485,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           history: undefined,
           user_id: localStorage.getItem('zhiwei_user_id') || 'default',
           category: category || undefined,
+          system_prompt: systemPrompt || undefined,
         },
         (eventType, data) => {
           switch (eventType) {
@@ -555,6 +556,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                     suggest: {
                       topic: (data.topic as string) || '',
                       summary: (data.summary as string) || '',
+                      category: (data.category as string) || '',
                     },
                   },
                 })
@@ -774,13 +776,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           user_id: localStorage.getItem('zhiwei_user_id') || 'default',
           conv_id: convId,
           msg_id: messageId,
+          category: suggest.category || (userMsg as any).template_name || '',
         })
         dispatch({
           type: 'SET_EXPERIENCE_SUGGEST',
           payload: { conversationId: convId, messageId, suggest: null },
         })
       } catch (err) {
-        console.error('Save experience suggestion failed:', err)
+        console.error('保存经验失败:', err)
       }
     },
     [],

@@ -106,3 +106,4 @@ class ExperienceSuggestEvent(AgentEvent):
     topic: str = ""
     summary: str = ""
     message_id: str = ""
+    category: str = ""

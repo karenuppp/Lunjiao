@@ -88,7 +88,7 @@ class RAGEngineAdapter:
             working_dir=working_dir,
             parser_output_dir=parser_output_dir,
             parser="mineru",
-            parse_method="txt",
+            parse_method="ocr",
             enable_image_processing=False,
             enable_table_processing=False,
             enable_equation_processing=False,

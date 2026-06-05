@@ -137,6 +137,7 @@ async def build_messages(
     question: str,
     history: list[dict] | None = None,
     user_id: str = "default",
+    system_prompt: str = "",
 ) -> list[ChatCompletionMessageParam]:
     experience_context = ""
     try:
@@ -152,7 +153,8 @@ async def build_messages(
     except Exception as e:
         print(f"[Agent] Experience retrieval skipped: {e}")
 
-    system_content = SYSTEM_PROMPT + experience_context
+    system_content = (system_prompt + "\n\n" + SYSTEM_PROMPT).strip() if system_prompt else SYSTEM_PROMPT
+    system_content += experience_context
 
     messages: list[ChatCompletionMessageParam] = [
         {"role": "system", "content": system_content}
@@ -332,6 +334,7 @@ class ReActAgent:
         default_category: str = "",
         conv_id: str = "",
         exp_extract_enabled: bool = False,
+        system_prompt: str = "",
     ) -> AsyncIterator[AgentEvent]:
         """Streaming ReAct loop. Yields typed AgentEvent objects.
 
@@ -346,7 +349,7 @@ class ReActAgent:
         yield ReplyStartEvent(conversation_id=conv_id)
 
         try:
-            messages = await build_messages(question, history, user_id=user_id)
+            messages = await build_messages(question, history, user_id=user_id, system_prompt=system_prompt)
             tool_schemas = get_schemas()
             data_sources_detected: list[str] = []
             final_answer = ""
@@ -505,6 +508,7 @@ class ReActAgent:
                                 topic=suggestion["topic"],
                                 summary=suggestion["summary"],
                                 message_id=msg_id,
+                                category=default_category,
                             )
                     except Exception:
                         pass

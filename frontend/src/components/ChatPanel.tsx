@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback, memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Select, Spin } from 'antd'
-import { User, Sparkles, Loader2, X, SendHorizontal, FileText, Table2, Presentation, Archive, Image as ImageIcon, FileType, Paperclip } from 'lucide-react'
+import { User, Sparkles, Loader2, X, FileText, Table2, Presentation, Archive, Image as ImageIcon, FileType, Paperclip } from 'lucide-react'
 import { listPromptTemplates, type PromptTemplate } from '../api/chat'
 import './chat.css'
 
@@ -13,7 +13,7 @@ interface Message {
   data_sources_used?: string[]
   message_id?: string
   feedback_rating?: 'up' | 'down'
-  experience_suggest?: { topic: string; summary: string } | null
+  experience_suggest?: { topic: string; summary: string; category?: string } | null
   template_name?: string
 }
 
@@ -21,6 +21,9 @@ interface ContextFile {
   id: string
   name: string
   size: number
+  file: File
+  status: 'uploading' | 'done' | 'error'
+  error?: string
 }
 
 interface ChatPanelProps {
@@ -28,10 +31,11 @@ interface ChatPanelProps {
   isLoading: boolean
   currentTool: string | null
   highlightMessageId?: string | null
-  onSendChat: (message: string, contextFiles?: ContextFile[], category?: string, visibleMessage?: string) => void
+  onSendChat: (message: string, contextFiles?: ContextFile[], category?: string, visibleMessage?: string, systemPrompt?: string) => void
   onFeedback: (messageId: string, rating: 'up' | 'down') => void
   onSaveExperienceSuggestion?: (messageId: string) => void
   onDismissExperienceSuggestion?: (messageId: string) => void
+  uploadFile?: (file: File) => Promise<{ fileId: string; fileName: string } | null>
 }
 
 let fileIdCounter = 0
@@ -132,7 +136,7 @@ const MessageItem = memo(function MessageItem({
       </div>
 
       <div className="message-body">
-        {msg.role === 'user' && msg.template_name && (
+        {msg.template_name && (
           <div className="template-tag">
             <FileText size={11} />
             <span>{msg.template_name}</span>
@@ -206,7 +210,7 @@ const MessageItem = memo(function MessageItem({
           <div className="experience-suggest-banner">
             <span className="exp-suggest-icon">💡</span>
             <span className="exp-suggest-text">
-              是否将「{msg.experience_suggest.topic}」的经验保存到经验库？
+              是否将该经验保存到经验库？
             </span>
             <button
               className="exp-suggest-btn save"
@@ -237,6 +241,7 @@ export default function ChatPanel({
   messages, isLoading, currentTool, highlightMessageId,
   onSendChat, onFeedback,
   onSaveExperienceSuggestion, onDismissExperienceSuggestion,
+  uploadFile,
 }: ChatPanelProps) {
   const [input, setInput] = useState('')
   const [contextFiles, setContextFiles] = useState<ContextFile[]>([])
@@ -250,6 +255,8 @@ export default function ChatPanel({
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const contextFilesRef = useRef<ContextFile[]>([])
+  contextFilesRef.current = contextFiles
 
   // Load templates on mount
   useEffect(() => {
@@ -298,7 +305,25 @@ export default function ChatPanel({
   }, [input])
 
   const selectedTemplate = templates.find(t => t.id === selectedTemplateId)
-  const canSend = (input.trim().length > 0 || contextFiles.length > 0) && !isLoading
+  const anyFileUploading = contextFiles.some(cf => cf.status === 'uploading')
+  const canSend = (input.trim().length > 0 || contextFiles.length > 0) && !isLoading && !anyFileUploading
+
+  const startFileUpload = useCallback(async (cf: ContextFile) => {
+    if (!uploadFile) {
+      setContextFiles(prev => prev.map(f => f.id === cf.id ? { ...f, status: 'error' as const, error: '上传不可用' } : f))
+      return
+    }
+    try {
+      const result = await uploadFile(cf.file)
+      if (result) {
+        setContextFiles(prev => prev.map(f => f.id === cf.id ? { ...f, status: 'done' as const } : f))
+      } else {
+        setContextFiles(prev => prev.map(f => f.id === cf.id ? { ...f, status: 'error' as const, error: '上传失败' } : f))
+      }
+    } catch {
+      setContextFiles(prev => prev.map(f => f.id === cf.id ? { ...f, status: 'error' as const, error: '上传异常' } : f))
+    }
+  }, [uploadFile])
 
   const handleDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -321,6 +346,39 @@ export default function ChatPanel({
     }
   }, [])
 
+  const addFiles = useCallback((files: FileList | File[]) => {
+    const MAX_FILES = 10
+    const MAX_SIZE = 10 * 1024 * 1024 // 10MB
+
+    const currentCount = contextFilesRef.current.length
+    const remainingSlots = MAX_FILES - currentCount
+    if (remainingSlots <= 0) return
+
+    const newFiles: ContextFile[] = []
+    const arr = Array.from(files)
+    for (let i = 0; i < arr.length && newFiles.length < remainingSlots; i++) {
+      const f = arr[i]
+      if (f.size > MAX_SIZE) {
+        newFiles.push({ id: `cf-${++fileIdCounter}`, name: f.name, size: f.size, file: f, status: 'error', error: '超过10MB' })
+        continue
+      }
+      newFiles.push({ id: `cf-${++fileIdCounter}`, name: f.name, size: f.size, file: f, status: 'uploading' })
+    }
+
+    if (newFiles.length === 0) return
+
+    setContextFiles(prev => [...prev, ...newFiles])
+
+    // Upload sequentially to avoid overwhelming backend with concurrent MinerU processes
+    ;(async () => {
+      for (const cf of newFiles) {
+        if (cf.status === 'uploading') {
+          await startFileUpload(cf)
+        }
+      }
+    })()
+  }, [startFileUpload])
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -328,16 +386,8 @@ export default function ChatPanel({
 
     const files = e.dataTransfer.files
     if (!files || files.length === 0) return
-
-    setContextFiles(prev => {
-      const next = [...prev]
-      for (let i = 0; i < files.length; i++) {
-        const f = files[i]
-        next.push({ id: `cf-${++fileIdCounter}`, name: f.name, size: f.size })
-      }
-      return next
-    })
-  }, [])
+    addFiles(files)
+  }, [addFiles])
 
   const removeContextFile = useCallback((fileId: string) => {
     setContextFiles(prev => prev.filter(f => f.id !== fileId))
@@ -350,37 +400,28 @@ export default function ChatPanel({
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
-
-    setContextFiles(prev => {
-      const next = [...prev]
-      for (let i = 0; i < files.length; i++) {
-        const f = files[i]
-        next.push({ id: `cf-${++fileIdCounter}`, name: f.name, size: f.size })
-      }
-      return next
-    })
+    addFiles(files)
     e.target.value = ''
   }
 
   const handleSend = () => {
     if (!canSend) return
 
-    // Assemble visible message (files + user input only, template goes to backend via system_prompt)
+    // Only include successfully uploaded files
+    const readyFiles = contextFiles.filter(cf => cf.status === 'done')
+
+    // Assemble visible message
     let visibleMessage = ''
-    if (contextFiles.length > 0) {
+    if (readyFiles.length > 0) {
       visibleMessage += '参考文件：\n'
-      visibleMessage += contextFiles.map(f => `- ${f.name}`).join('\n')
+      visibleMessage += readyFiles.map(f => `- ${f.name}`).join('\n')
       visibleMessage += '\n\n'
     }
     visibleMessage += input.trim()
 
-    // Full message sent to backend includes template as system prompt
-    let backendMessage = visibleMessage
-    if (selectedTemplate) {
-      backendMessage = selectedTemplate.content + '\n\n' + backendMessage
-    }
+    const systemPrompt = selectedTemplate?.content || ''
 
-    onSendChat(backendMessage, contextFiles.length > 0 ? contextFiles : undefined, selectedTemplate?.title, visibleMessage)
+    onSendChat(visibleMessage, readyFiles.length > 0 ? readyFiles : undefined, selectedTemplate?.title, visibleMessage, systemPrompt)
     setInput('')
     setContextFiles([])
   }
@@ -481,7 +522,7 @@ export default function ChatPanel({
             className="attach-btn"
             onClick={handlePaperclipClick}
             disabled={isLoading}
-            title="添加文件"
+            title="添加文件（最多10个，每个10MB）"
           >
             <Paperclip size={18} strokeWidth={1.8} />
           </button>
@@ -490,9 +531,7 @@ export default function ChatPanel({
             onClick={handleSend}
             disabled={!canSend}
           >
-            {canSend ? (
-              <><SendHorizontal size={14} style={{ marginRight: 4 }} />发送</>
-            ) : '发送'}
+            {'发送'}
           </button>
         </div>
 
@@ -500,11 +539,17 @@ export default function ChatPanel({
           <div className="context-files-bar">
             {contextFiles.map((cf) => {
               const meta = getFileTypeMeta(cf.name)
+              const isUploading = cf.status === 'uploading'
+              const isError = cf.status === 'error'
               return (
-                <div key={cf.id} className={`context-file-chip ${meta.colorClass}`}>
-                  <div className="cf-icon">{meta.icon}</div>
+                <div key={cf.id} className={`context-file-chip ${meta.colorClass}${isError ? ' cf-error' : ''}`}>
+                  <div className="cf-icon">
+                    {isUploading ? <Loader2 size={14} className="progress-spinner" /> : meta.icon}
+                  </div>
                   <span className="cf-name" title={cf.name}>{cf.name}</span>
-                  <span className="cf-size">{formatFileSize(cf.size)}</span>
+                  <span className={`cf-status ${isError ? 'cf-status-error' : ''}`}>
+                    {isUploading ? '上传中…' : isError ? (cf.error || '上传失败') : formatFileSize(cf.size)}
+                  </span>
                   <button className="cf-remove" onClick={() => removeContextFile(cf.id)} title="移除">
                     <X size={12} />
                   </button>
