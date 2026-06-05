@@ -10,8 +10,8 @@ RUN npm run build
 FROM python:3.12-slim
 WORKDIR /app
 
-RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/*.sources 2>/dev/null || true; \
-    sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
+RUN sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list.d/*.sources 2>/dev/null || true; \
+    sed -i 's|http://deb.debian.org|http://mirrors.tuna.tsinghua.edu.cn|g' /etc/apt/sources.list 2>/dev/null || true
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libreoffice-core \
@@ -23,8 +23,8 @@ RUN apt-get update && \
 # docker exec <container> apt-get update && apt-get install -y fonts-noto-cjk
 
 COPY backend/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ $(grep -v '^raganything\|^mineru\|^#' /tmp/requirements.txt | grep -v '^$')
-RUN pip install --no-cache-dir -i https://mirrors.aliyun.com/pypi/simple/ raganything==1.3.1
+RUN pip install --no-cache-dir -i https://mirrors.tuna.tsinghua.edu.cn/pypi/simple/ $(grep -v '^raganything\|^mineru\|^#' /tmp/requirements.txt | grep -v '^$')
+RUN pip install --no-cache-dir -i https://mirrors.tuna.tsinghua.edu.cn/pypi/simple/ raganything==1.3.1
 
 COPY backend/ /app/backend/
 COPY --from=frontend-builder /build/frontend/dist /app/frontend/dist
