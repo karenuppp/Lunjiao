@@ -9,6 +9,7 @@ router = APIRouter()
 templates_router = APIRouter()
 
 DEFAULT_KEY = "default"
+SYSTEM_DEFAULT_KEY = "system_default"
 
 
 class PromptPayload(BaseModel):
@@ -188,6 +189,11 @@ def delete_template(template_id: int) -> dict:
             raise HTTPException(
                 status_code=400,
                 detail="Cannot delete the default system prompt template",
+            )
+        if row.prompt_key == SYSTEM_DEFAULT_KEY:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot delete the system default template",
             )
         db.delete(row)
         db.commit()

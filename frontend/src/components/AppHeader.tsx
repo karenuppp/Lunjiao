@@ -233,7 +233,6 @@ export default function AppHeader({
               <li>优化多个对话窗口同时回复</li>
               <li>优化经验管理页面布局</li>
             </ul>
-            <div style={{ marginTop: 12, color: '#9CA3AF', fontSize: 13 }}>开发：XXX</div>
           </div>
         </div>
       </Modal>

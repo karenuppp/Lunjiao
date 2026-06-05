@@ -19,7 +19,7 @@ export default function SearchModal({ open, onClose, onSelectResult }: SearchMod
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const inputRef = useRef<any>(null)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Focus input when opened
   useEffect(() => {

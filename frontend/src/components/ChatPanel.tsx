@@ -268,7 +268,12 @@ export default function ChatPanel({
       setTemplatesLoading(true)
       try {
         const data = await listPromptTemplates()
-        if (!cancelled) setTemplates(data)
+        if (!cancelled) {
+          setTemplates(data)
+          // Auto-select "系统默认" template
+          const systemDefault = data.find(t => t.title === '系统默认' || t.prompt_key === 'system_default')
+          if (systemDefault) setSelectedTemplateId(systemDefault.id)
+        }
       } catch { }
       finally {
         if (!cancelled) setTemplatesLoading(false)

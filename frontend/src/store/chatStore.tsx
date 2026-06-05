@@ -200,6 +200,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
 
     case 'SET_LOADING': {
       const cid = action.payload
+      if (!cid) return state
       if (state.loadingConversationIds.includes(cid)) return state
       return { ...state, loadingConversationIds: [...state.loadingConversationIds, cid] }
     }

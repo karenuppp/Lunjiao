@@ -78,5 +78,15 @@ def init_db():
         elif not existing.title:
             existing.title = "默认提示词"
             db.commit()
+
+        # Ensure "系统默认" template exists (empty content, modifiable, not deletable)
+        sys_default = db.query(SystemPrompt).filter(SystemPrompt.prompt_key == "system_default").first()
+        if sys_default is None:
+            db.add(SystemPrompt(
+                prompt_key="system_default",
+                title="系统默认",
+                prompt_content="",
+            ))
+            db.commit()
     finally:
         db.close()
