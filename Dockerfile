@@ -12,7 +12,8 @@ RUN npm run build
 FROM python:3.11-slim
 WORKDIR /app
 
-# LibreOffice: required by MinerU to convert Office docs (DOCX/PPT) → PDF before parsing
+RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/*.sources 2>/dev/null || true; \
+    sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         libreoffice-core \
