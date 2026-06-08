@@ -25,7 +25,31 @@ cd /opt/zhiwei
 docker load -i zhiwei_0.3.tar.gz
 ```
 
-### 3. 启动容器
+### 3. 准备环境变量
+
+在服务器上创建 `/opt/zhiwei/.env`：
+
+```bash
+# LLM 配置
+OPENAI_API_KEY=your-api-key
+OPENAI_BASE_URL=http://your-llm-server:1234/v1
+MODEL_NAME=qwen3.6-35B-A3B-apex
+
+# Embedding 配置（如与 LLM 共用可省略）
+EMBEDDING_API_KEY=your-api-key
+EMBEDDING_BASE_URL=http://your-llm-server:1234/v1
+EMBEDDING_MODEL=text-embedding-nomic-embed-text-v1.5
+EMBEDDING_DIM=768
+
+# MySQL
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=123456
+DB_NAME=zhiwei
+```
+
+### 4. 启动容器
 
 ```bash
 docker run -d \
@@ -35,14 +59,13 @@ docker run -d \
   -v /opt/zhiwei/uploads:/app/uploads \
   -v /opt/zhiwei/opinions:/app/opinions \
   -v /opt/zhiwei/talk:/app/talk \
-  -e OPENAI_API_KEY="your-api-key" \
-  -e OPENAI_BASE_URL="http://your-llm-server:1234/v1" \
-  -e MODEL_NAME="your-model-name" \
-  -e DATABASE_URL="mysql+pymysql://user:password@127.0.0.1:3306/zhiwei" \
+  --env-file /opt/zhiwei/.env \
   zhiwei:latest
 ```
 
-### 4. 初始化数据库
+> 也可用 `-e` 逐个传参代替 `--env-file`，效果相同。
+
+### 5. 初始化数据库（自动）
 
 容器首次启动会自动执行 `init_db()`：
 - 创建所有表（如不存在则会创建）
@@ -55,7 +78,7 @@ docker run -d \
 docker logs zhiwei | grep "\[Init\]"
 ```
 
-### 5. 验证部署
+### 6. 验证部署
 
 ```bash
 # 检查服务状态
@@ -123,7 +146,7 @@ docker run -d \
   -v /opt/zhiwei/uploads:/app/uploads \
   -v /opt/zhiwei/opinions:/app/opinions \
   -v /opt/zhiwei/talk:/app/talk \
-  -e ... \
+  --env-file /opt/zhiwei/.env \
   zhiwei:latest
 
 # 6. 检查启动日志
@@ -132,19 +155,22 @@ docker logs zhiwei --tail 30
 
 ## 环境变量参考
 
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `PORT` | 服务端口 | `8000` |
-| `OPENAI_API_KEY` | LLM API 密钥 | — |
-| `OPENAI_BASE_URL` | LLM API 地址 | `http://localhost:1234/v1` |
-| `MODEL_NAME` | 模型名称 | `qwen3.6-35B-A3B-apex` |
-| `DATABASE_URL` | MySQL 连接串 | `mysql+pymysql://root@127.0.0.1:3306/zhiwei` |
-| `UPLOAD_DIR` | 上传文件存储路径 | `/app/uploads` |
-| `EMBEDDING_API_KEY` | Embedding API 密钥 | — |
-| `EMBEDDING_BASE_URL` | Embedding API 地址 | — |
-| `EMBEDDING_MODEL` | Embedding 模型名 | — |
-| `EMBEDDING_DIM` | Embedding 维度 | — |
-| `TIKTOKEN_CACHE_DIR` | tiktoken 缓存目录 | `/app/.tiktoken_cache` |
+所有变量也可在 `.env` 文件中配置。完整默认值见 `backend/app/config.py`。
+
+## Tiktoken 缓存说明
+
+构建镜像时会下载 tiktoken 编码文件（约 10MB），保存在容器的 `/app/.tiktoken_cache`：
+
+```
+Downloading gpt-4o-mini... ✓
+Downloading gpt-4o... ✓
+Downloading gpt-4... ✓
+...
+```
+
+这些文件是 **文本分词器（tokenizer）的编码表**，LightRAG 用它们来切分文档。虽然文件名带 `gpt-4o` 等，但只是编码名称，与调用哪个 LLM 无关——你的模型是 qwen 也不影响，分词器只是做文本切割。
+
+预下载是因为生产服务器不联网，避免 LightRAG 启动时尝试连接 `openaipublic.blob.core.windows.net` 下载编码文件导致超时报错。
 
 ## 故障排查
 
