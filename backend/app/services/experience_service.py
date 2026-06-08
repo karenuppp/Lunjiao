@@ -217,13 +217,17 @@ async def _check_semantic_duplicate(content: str, user_id: str) -> Optional[Expe
 async def _search_vector_only(
     query_text: str, user_id: str, top_k: int = 3,
 ) -> list[dict]:
-    """Raw vector search without scoring, used internally for dedup."""
     try:
         from app.rag_engine import rag
         await rag._ensure_ready(f"exp_default")
         from lightrag.base import QueryParam
 
-        lightrag = rag._rags[f"exp_default"].lightrag
+        rag_instance = rag._rags.get(f"exp_default")
+        if not rag_instance or not getattr(rag_instance, "lightrag", None):
+            print("[Experience] LightRAG not initialized, skip vector search")
+            return []
+
+        lightrag = rag_instance.lightrag
         param = QueryParam(
             mode="naive",
             only_need_context=True,

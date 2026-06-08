@@ -26,6 +26,10 @@ COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple $(grep -v '^raganything\|^mineru\|^#' /tmp/requirements.txt | grep -v '^$')
 RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple raganything==1.3.1
 
+# Pre-download tiktoken encodings for offline deployment
+ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken_cache
+RUN python -m lightrag.tools.download_cache --cache-dir /app/.tiktoken_cache
+
 COPY backend/ /app/backend/
 COPY --from=frontend-builder /build/frontend/dist /app/frontend/dist
 RUN mkdir -p /app/uploads /app/opinions /app/talk

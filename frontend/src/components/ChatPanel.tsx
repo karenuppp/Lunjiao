@@ -501,6 +501,7 @@ export default function ChatPanel({
               allowClear
               placement="topLeft"
               style={selectStyles}
+              getPopupContainer={(trigger) => trigger.parentElement || document.body}
               options={templates.map(t => ({
                 value: t.id,
                 label: t.title,

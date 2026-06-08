@@ -118,7 +118,10 @@ class RAGEngineAdapter:
 
     async def _ensure_ready(self, user_id: str):
         if user_id not in self._rags:
-            await self._init_user_rag(user_id)
+            try:
+                await self._init_user_rag(user_id)
+            except Exception as e:
+                print(f"[RAG] Init failed for {user_id}: {e}")
 
     def _build_category_map(self) -> dict[str, str]:
         """Build file_path → category mapping from .meta files on disk."""
