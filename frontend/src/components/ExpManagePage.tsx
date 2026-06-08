@@ -221,6 +221,7 @@ export default function ExpManagePage() {
                 okText="确认驳回"
                 cancelText="取消"
                 okButtonProps={{ danger: true }}
+                getPopupContainer={() => document.body}
               >
                 <Button
                   type="link"
@@ -248,6 +249,7 @@ export default function ExpManagePage() {
             okText="确认删除"
             cancelText="取消"
             okButtonProps={{ danger: true }}
+            getPopupContainer={() => document.body}
           >
             <Button
               type="link"

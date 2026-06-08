@@ -199,7 +199,7 @@ export default function DbManagePage() {
               连接
             </Button>
           )}
-          <Popconfirm title="确认删除" description={`确定要删除连接「${record.name}」吗？`} onConfirm={() => handleDelete(record.id)} okText="确认删除" cancelText="取消" okButtonProps={{ danger: true }}>
+          <Popconfirm title="确认删除" description={`确定要删除连接「${record.name}」吗？`} onConfirm={() => handleDelete(record.id)} okText="确认删除" cancelText="取消" okButtonProps={{ danger: true }} getPopupContainer={() => document.body}>
             <Button size="small" danger icon={<DeleteOutlined />}>
               删除
             </Button>

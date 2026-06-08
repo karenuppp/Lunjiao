@@ -495,6 +495,7 @@ export default function KbManagePage() {
           okText="确认删除"
           cancelText="取消"
           okButtonProps={{ danger: true }}
+          getPopupContainer={() => document.body}
         >
           <Button
             type="text" size="small" danger
