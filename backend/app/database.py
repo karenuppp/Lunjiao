@@ -64,6 +64,7 @@ def init_db():
     _migrate()
 
     from app.models.system_prompt import SystemPrompt
+    from app.agent.prompts import DEFAULT_SYSTEM_PROMPT
     db = SessionLocal()
     try:
         existing = db.query(SystemPrompt).filter(SystemPrompt.prompt_key == "default").first()
@@ -71,17 +72,22 @@ def init_db():
             db.add(SystemPrompt(
                 prompt_key="default",
                 title="系统默认",
-                prompt_content="",
+                prompt_content=DEFAULT_SYSTEM_PROMPT,
             ))
             db.commit()
-            print("[Init] Seeded '系统默认' (default)")
+            print("[Init] Seeded '系统默认' (default) with system prompt")
         else:
-            # Migrate: old "默认提示词" → "系统默认", clear content
-            if existing.title != "系统默认" or existing.prompt_content != "":
+            # Migrate old titles, fill empty content with current default
+            updated = False
+            if existing.title != "系统默认":
                 existing.title = "系统默认"
-                existing.prompt_content = ""
+                updated = True
+            if not existing.prompt_content or not existing.prompt_content.strip():
+                existing.prompt_content = DEFAULT_SYSTEM_PROMPT
+                updated = True
+            if updated:
                 db.commit()
-                print("[Init] Migrated existing default → '系统默认' (empty)")
+                print("[Init] Migrated existing default → '系统默认' (updated)")
 
         # Clean up legacy system_default key
         legacy = db.query(SystemPrompt).filter(SystemPrompt.prompt_key == "system_default").first()
