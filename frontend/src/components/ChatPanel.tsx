@@ -499,9 +499,8 @@ export default function ChatPanel({
               onChange={(val) => setSelectedTemplateId(val)}
               placeholder="选择提示词模板"
               allowClear
-              placement="topLeft"
               style={selectStyles}
-              getPopupContainer={(trigger) => trigger.parentElement || document.body}
+              getPopupContainer={() => document.body}
               options={templates.map(t => ({
                 value: t.id,
                 label: t.title,
