@@ -27,6 +27,7 @@ def _migrate():
         migrations = [
             "ALTER TABLE system_prompt ADD COLUMN title VARCHAR(128) NOT NULL DEFAULT ''",
             "ALTER TABLE users ADD COLUMN exp_extract_enabled TINYINT(1) NOT NULL DEFAULT 0",
+            "ALTER TABLE experience MODIFY COLUMN status ENUM('pending','active','archived','deprecated') NOT NULL DEFAULT 'active'",
             "CREATE TABLE IF NOT EXISTS skills ("
             " id INT AUTO_INCREMENT PRIMARY KEY,"
             " title VARCHAR(128) NOT NULL,"
