@@ -51,6 +51,7 @@ talk/
 
 # Tarballs
 *.tar
+*.tar.gz
 
 # Temp files
 CLAUDE.original.md
