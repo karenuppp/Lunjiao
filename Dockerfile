@@ -23,7 +23,7 @@ RUN apt-get update && \
 # docker exec <container> apt-get update && apt-get install -y fonts-noto-cjk
 
 COPY backend/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple $(grep -v '^raganything\|^mineru\|^#' /tmp/requirements.txt | grep -v '^$')
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple $(grep -v '^raganything\|^#' /tmp/requirements.txt | grep -v '^$')
 RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple raganything==1.3.1
 
 # Pre-download tiktoken encodings for offline deployment

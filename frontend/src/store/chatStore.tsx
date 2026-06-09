@@ -586,7 +586,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   )
 
   const uploadFile = useCallback(async (file: File, userId?: string): Promise<UploadedFileMeta | null> => {
-    const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+    const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
     const currentUserId = userId || localStorage.getItem('zhiwei_user_id') || 'default'
     const formData = new FormData()
     formData.append('file', file)
@@ -619,7 +619,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const removeUploadedFile = useCallback(async (fileId: string, userId?: string) => {
-    const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api'
+    const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
     const currentUserId = userId || localStorage.getItem('zhiwei_user_id') || 'default'
     try {
       await fetch(`${BASE_URL}/upload/files/${fileId}?user_id=${encodeURIComponent(currentUserId)}`, { method: 'DELETE' })
