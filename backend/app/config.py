@@ -45,9 +45,13 @@ class Settings:
 
     port: int = int(os.getenv("PORT", "8000"))
 
+    log_dir: str = os.getenv("LOG_DIR", str(Path(__file__).parent.parent / "logs"))
+    log_level: str = os.getenv("LOG_LEVEL", "INFO")
+
     upload_dir: str = os.getenv("UPLOAD_DIR", str(Path(__file__).parent.parent / "uploads"))
     talk_dir: str = os.getenv("TALK_DIR", str(Path(__file__).parent.parent.parent / "talk"))
     max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "50"))
+    rag_indexing_timeout: int = int(os.getenv("RAG_INDEXING_TIMEOUT", "300"))
     allowed_extensions: list[str] = os.getenv(
         "ALLOWED_EXTENSIONS",
         ".pdf,.docx,.doc,.xlsx,.xls,.pptx,.csv,.txt,.md,.png,.jpg,.jpeg,.zip,.rar,.7z,.tar.gz,.tgz",

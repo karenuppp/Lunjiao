@@ -5,6 +5,8 @@ from fastapi.responses import FileResponse
 import os
 from app.api import chat, data_sources, history, upload, auth, db_connections, prompt, experience, opinion, skill
 from app.database import init_db
+from app.config import settings
+from app.logger import init_logging
 from pathlib import Path
 
 app = FastAPI(
@@ -27,9 +29,46 @@ app.add_middleware(
 )
 
 
+def _verify_embedding_dim() -> None:
+    """Check that the configured EMBEDDING_DIM matches the actual model output."""
+    from app.logger import get_logger
+    log = get_logger(__name__)
+
+    try:
+        import httpx, numpy as np
+        base_url = settings.embedding_base_url.rstrip("/").replace("/v1", "")
+        api_key = settings.embedding_api_key
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+
+        resp = httpx.post(
+            f"{base_url}/v1/embeddings",
+            json={"model": settings.embedding_model, "input": ["test"]},
+            headers=headers,
+            timeout=15.0,
+        )
+        if resp.status_code != 200:
+            log.warning(f"[Init] Cannot verify embedding dim: HTTP {resp.status_code}")
+            return
+
+        data = resp.json()
+        actual_dim = len(data["data"][0]["embedding"]) if data.get("data") else 0
+        expected = settings.embedding_dim
+
+        if actual_dim and actual_dim != expected:
+            log.error(
+                f"[Init] EMBEDDING DIM MISMATCH: model '{settings.embedding_model}' "
+                f"returns {actual_dim}-dim vectors, but EMBEDDING_DIM is set to {expected}. "
+                f"Update EMBEDDING_DIM={actual_dim} in .env or environment."
+            )
+        else:
+            log.info(f"[Init] Embedding dim verified: {actual_dim} (model={settings.embedding_model})")
+    except Exception as e:
+        log.warning(f"[Init] Embedding dim check skipped: {e}")
+
+
 @app.on_event("startup")
 def startup():
-    # ── CPU 线程限制: 避免 embedding/NLP 库吃满全部核心 ──
+    init_logging(settings.log_dir, settings.log_level)
     os.environ.setdefault("OMP_NUM_THREADS", "4")
     try:
         import torch
@@ -37,6 +76,7 @@ def startup():
     except ImportError:
         pass
     init_db()
+    _verify_embedding_dim()
 
 
 @app.get("/api/health")

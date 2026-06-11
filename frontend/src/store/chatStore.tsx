@@ -591,6 +591,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     const formData = new FormData()
     formData.append('file', file)
     formData.append('user_id', currentUserId)
+    formData.append('source', 'chat')
 
     try {
       const res = await fetch(`${BASE_URL}/upload`, {

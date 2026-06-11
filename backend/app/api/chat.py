@@ -2,7 +2,6 @@ from fastapi import APIRouter, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 import json
-import traceback
 
 from starlette.responses import StreamingResponse
 
@@ -10,6 +9,9 @@ from app.agent.graph import run_agent_sync, run_agent_stream_simple
 from app.agent.events import FinalAnswerEvent, DataSourceEvent, ErrorEvent
 from app.database import SessionLocal
 from app.models.user import User
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -144,7 +146,7 @@ async def chat_stream(request: ChatRequest):
                 yield event.to_sse()
         except Exception as e:
             yield ErrorEvent(message=f"流式响应异常: {e}").to_sse()
-            traceback.print_exc()
+            logger.exception("[Chat:Stream] 流式响应异常")
 
         _add_to_history(conv_id, "user", request.message, template_name=request.category or "")
         if final_answer:
@@ -184,20 +186,31 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
         finally:
             db.close()
 
-        if can_extract:
+        if not can_extract:
+            logger.info(f"[Feedback:Save] Experience extraction disabled for user={user_id}, skip")
+        else:
             conv_id, history = _get_or_create_conversation(request.conversation_id)
 
             user_question = ""
             ai_answer = ""
             template_name = ""
-            for msg in reversed(history):
-                if msg["role"] == "assistant" and not ai_answer:
-                    ai_answer = msg["content"]
-                elif msg["role"] == "user" and not user_question:
-                    user_question = msg["content"]
-                    template_name = msg.get("template_name", "")
-                if user_question and ai_answer:
+
+            # Find the rated message and its preceding user question
+            rated_idx = -1
+            for i, msg in enumerate(history):
+                if msg.get("message_id") == request.message_id or msg.get("id") == request.message_id:
+                    if msg["role"] == "assistant":
+                        ai_answer = msg["content"]
+                        rated_idx = i
                     break
+
+            if rated_idx >= 0:
+                # Search backwards from the rated message to find preceding user question
+                for j in range(rated_idx - 1, -1, -1):
+                    if history[j]["role"] == "user":
+                        user_question = history[j]["content"]
+                        template_name = history[j].get("template_name", "")
+                        break
 
             if user_question and ai_answer:
                 background_tasks.add_task(
@@ -210,7 +223,7 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
                     category=template_name,
                 )
             else:
-                print(f"[Feedback] Q&A not found for conv={conv_id}, msg={request.message_id}")
+                logger.warning(f"[Feedback:Save] Q&A not found for conv={conv_id}, msg={request.message_id}")
 
     # Persist feedback rating to conversation file so it survives re-login
     persistent_store.set_message_feedback(request.conversation_id, request.message_id, request.rating)
@@ -226,7 +239,7 @@ def _extract_experiences_bg(
     msg_id: str,
     category: str = "",
 ):
-    print(f"[Feedback] BG task started for user {user_id}")
+    logger.info(f"[Feedback:BG] Task started for user {user_id}")
     try:
         import asyncio
         from app.services.experience_service import extract_and_save
@@ -249,9 +262,8 @@ def _extract_experiences_bg(
             for task in pending:
                 task.cancel()
             loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-            print(f"[Feedback] Extracted {count} experience(s) for user {user_id}")
+            logger.info(f"[Feedback:Extract] Extracted {count} experience(s) for user {user_id}")
         finally:
             loop.close()
     except Exception as e:
-        print(f"[Feedback] Background extraction failed: {e}")
-        traceback.print_exc()
+        logger.exception(f"[Feedback:BG] Background extraction failed: {e}")

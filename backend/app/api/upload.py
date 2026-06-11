@@ -13,6 +13,9 @@ from pydantic import BaseModel
 
 from app.config import settings
 from app.rag_engine import rag
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter()
 
@@ -24,10 +27,11 @@ class UploadResponse(BaseModel):
     file_type: str
     category: str
     uploaded_at: str
-    rag_status: str  # "indexed" | "pending" | "failed"
+    rag_status: str  # "indexed" | "pending" | "failed" | "skipped"
     rag_error: str = ""  # human-readable error message when rag_status="failed"
     chunk_count: int = 0
     user_id: str = "default"
+    source: str = "kb"  # "kb" | "chat"
     is_archive: bool = False
     extracted_files: list[dict] = []  # [{name, status, error?}] for archives
 
@@ -91,6 +95,7 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
 
         rag_status = meta.get("rag_status", "indexed")  # default indexed for legacy files without status in meta
         chunk_count = meta.get("chunk_count", 0)
+        source = meta.get("source", "kb")
 
         rebuilt[file_id] = UploadResponse(
             file_id=file_id,
@@ -102,6 +107,7 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
             rag_status=rag_status,
             chunk_count=chunk_count,
             user_id=file_user_id,
+            source=source,
         )
 
     return rebuilt
@@ -120,11 +126,11 @@ async def _index_file_local(file_id: str, file_path: str, file_name: str, catego
         return "indexed", chunk_count, ""
     except Exception as e:
         error_msg = str(e) if str(e) else type(e).__name__
-        print(f"[Upload] RAG indexing error for {file_name}: {error_msg}")
+        logger.error(f"[Upload:Index] RAG indexing error for {file_name}: {error_msg}")
         return "failed", 0, f"索引过程异常: {error_msg}"
 
 
-def _update_meta_rag_status(upload_dir: Path, file_id: str, rag_status: str, chunk_count: int = 0) -> None:
+def _update_meta_rag_status(upload_dir: Path, file_id: str, rag_status: str, chunk_count: int = 0, rag_error: str = "") -> None:
     meta_path = upload_dir / f"{file_id}.meta"
     try:
         if meta_path.exists():
@@ -134,6 +140,8 @@ def _update_meta_rag_status(upload_dir: Path, file_id: str, rag_status: str, chu
             meta = {}
         meta["rag_status"] = rag_status
         meta["chunk_count"] = chunk_count
+        if rag_error:
+            meta["rag_error"] = rag_error
         with open(meta_path, "w", encoding="utf-8") as f:
             json.dump(meta, f, ensure_ascii=False)
     except Exception:
@@ -248,6 +256,7 @@ async def _process_single_file(
     upload_dir: Path,
     allowed_extensions: list[str],
     user_id: str = "default",
+    source: str = "kb",
 ) -> UploadResponse:
     ext = _validate_file_type(filename, allowed_extensions)
     file_size = len(content)
@@ -276,6 +285,7 @@ async def _process_single_file(
                 "category": category,
                 "uploaded_at": timestamp,
                 "user_id": user_id,
+                "source": source,
             }))
     except Exception:
         pass
@@ -290,7 +300,7 @@ async def _process_single_file(
             extracted_paths = _extract_archive(str(save_path), temp_dir)
         except RuntimeError as e:
             shutil.rmtree(temp_dir, ignore_errors=True)
-            _update_meta_rag_status(upload_dir, file_id, "failed", 0)
+            _update_meta_rag_status(upload_dir, file_id, "failed", 0, f"解压失败: {e}")
             return UploadResponse(
                 file_id=file_id,
                 file_name=filename,
@@ -306,7 +316,7 @@ async def _process_single_file(
 
         if not extracted_paths:
             shutil.rmtree(temp_dir, ignore_errors=True)
-            _update_meta_rag_status(upload_dir, file_id, "failed", 0)
+            _update_meta_rag_status(upload_dir, file_id, "failed", 0, "压缩包内无文件")
             return UploadResponse(
                 file_id=file_id,
                 file_name=filename,
@@ -333,6 +343,10 @@ async def _process_single_file(
                 })
                 continue
 
+            if source == "chat":
+                extracted_files.append({"name": child_name, "status": "skipped"})
+                continue
+
             rag_status, chunk_count, rag_error = await _index_file_local(
                 file_id, child_path, child_name, category, user_id
             )
@@ -349,6 +363,7 @@ async def _process_single_file(
 
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+        rag_status_final = "skipped" if source == "chat" else ("indexed" if any_indexed else "failed")
         response = UploadResponse(
             file_id=file_id,
             file_name=filename,
@@ -356,15 +371,31 @@ async def _process_single_file(
             file_type=ext.lstrip("."),
             category=category,
             uploaded_at=timestamp,
-            rag_status="indexed" if any_indexed else "failed",
+            rag_status=rag_status_final,
             chunk_count=total_chunks,
             user_id=user_id,
             is_archive=True,
             extracted_files=extracted_files,
         )
 
-        _update_meta_rag_status(upload_dir, file_id, response.rag_status, response.chunk_count)
+        _update_meta_rag_status(upload_dir, file_id, response.rag_status, response.chunk_count, response.rag_error)
 
+        return response
+
+    if source == "chat":
+        # Chat-uploaded files: save to disk but skip RAG indexing.
+        # Agent can still read them via find_file_by_name tool.
+        response = UploadResponse(
+            file_id=file_id,
+            file_name=filename,
+            file_size=file_size,
+            file_type=ext.lstrip("."),
+            category=category,
+            uploaded_at=timestamp,
+            rag_status="skipped",
+        )
+        _update_meta_rag_status(upload_dir, file_id, "skipped", 0)
+        logger.info(f"[Upload:Chat] Chat file saved (no RAG): {filename}")
         return response
 
     rag_task = asyncio.create_task(
@@ -382,15 +413,18 @@ async def _process_single_file(
     )
 
     try:
-        rag_status, chunk_count, rag_error = await asyncio.wait_for(rag_task, timeout=60.0)
+        rag_status, chunk_count, rag_error = await asyncio.wait_for(rag_task, timeout=settings.rag_indexing_timeout)
         response.rag_status = rag_status
         response.chunk_count = chunk_count
         response.rag_error = rag_error
     except asyncio.TimeoutError:
         response.rag_status = "failed"
-        response.rag_error = "索引超时（60 秒），可能嵌入服务未启动或文件过大"
+        response.rag_error = f"索引超时（{settings.rag_indexing_timeout} 秒），可调大 RAG_INDEXING_TIMEOUT 环境变量"
+    except Exception as exc:
+        response.rag_status = "failed"
+        response.rag_error = f"索引异常: {exc}"
 
-    _update_meta_rag_status(upload_dir, file_id, response.rag_status, response.chunk_count)
+    _update_meta_rag_status(upload_dir, file_id, response.rag_status, response.chunk_count, response.rag_error)
 
     _indexed_files[file_id] = response
     return response
@@ -401,6 +435,7 @@ async def upload_file(
     file: UploadFile = File(...),
     category: str = Form(""),
     user_id: str = Form("default"),
+    source: str = Form("kb"),
 ):
     if not file.filename:
         raise HTTPException(400, "No file provided")
@@ -413,7 +448,7 @@ async def upload_file(
         ".zip", ".rar", ".7z", ".tar.gz", ".tgz",
     ]
 
-    return await _process_single_file(content, file.filename, category, upload_dir, allowed, user_id)
+    return await _process_single_file(content, file.filename, category, upload_dir, allowed, user_id, source)
 
 
 @router.post("/batch")
@@ -421,6 +456,7 @@ async def upload_files_batch(
     files: list[UploadFile] = File(...),
     category: str = Form(""),
     user_id: str = Form("default"),
+    source: str = Form("kb"),
 ):
     if not files:
         raise HTTPException(400, "No files provided")
@@ -440,7 +476,7 @@ async def upload_files_batch(
             continue
         try:
             content = await file.read()
-            resp = await _process_single_file(content, file.filename, category, upload_dir, allowed, user_id)
+            resp = await _process_single_file(content, file.filename, category, upload_dir, allowed, user_id, source)
             results.append(resp)
         except HTTPException as e:
             errors.append({"filename": file.filename, "error": e.detail})
@@ -465,6 +501,8 @@ async def list_uploaded_files(
 
     filtered: list[UploadResponse] = []
     for f in rebuilt.values():
+        if f.source == "chat":
+            continue  # Chat uploads are not shown in KB management
         if scope == "public":
             if f.user_id != "default":
                 continue

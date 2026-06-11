@@ -31,6 +31,9 @@ from app.config import settings
 from app.models.system_prompt import SystemPrompt
 from app.models.db_connection import DbConnection
 from app.database import SessionLocal
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # ── Experience suggestion heuristics ────────────────────────────────────────
@@ -151,7 +154,7 @@ async def build_messages(
                     parts.append(f"- {text[:300]}")
             experience_context = "\n".join(parts)
     except Exception as e:
-        print(f"[Agent] Experience retrieval skipped: {e}")
+        logger.warning(f"[Agent:Run] Experience retrieval skipped: {e}")
 
     system_content = (system_prompt + "\n\n" + SYSTEM_PROMPT).strip() if system_prompt else SYSTEM_PROMPT
     system_content += experience_context
@@ -515,5 +518,5 @@ class ReActAgent:
 
         except Exception as e:
             error_msg = f"Agent execution failed: {str(e)}"
-            print(f"[Agent Error] {error_msg}")
+            logger.error(f"[Agent:Error] {error_msg}")
             yield ErrorEvent(message=error_msg)
