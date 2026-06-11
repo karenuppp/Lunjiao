@@ -17,14 +17,15 @@ RUN apt-get update && \
         libreoffice-core \
         libreoffice-writer \
         libreoffice-impress \
+        libgl1 \
+        libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 # 若需图表中文渲染，在目标服务器执行：
 # docker exec <container> apt-get update && apt-get install -y fonts-noto-cjk
 
 COPY backend/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple $(grep -v '^raganything\|^#' /tmp/requirements.txt | grep -v '^$')
-RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple raganything==1.3.1
+RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r /tmp/requirements.txt
 
 # Pre-download tiktoken encodings for offline deployment
 ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken_cache
@@ -32,9 +33,10 @@ RUN python -m lightrag.tools.download_cache --cache-dir /app/.tiktoken_cache
 
 COPY backend/ /app/backend/
 COPY --from=frontend-builder /build/frontend/dist /app/frontend/dist
-RUN mkdir -p /app/uploads /app/opinions /app/talk
+RUN mkdir -p /app/uploads /app/opinions /app/talk /app/logs
 
 ENV UPLOAD_DIR=/app/uploads
+ENV LOG_DIR=/app/logs
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
