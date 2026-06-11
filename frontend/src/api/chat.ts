@@ -456,7 +456,7 @@ export async function sendFeedback(
   messageId: string,
   rating: 'up' | 'down',
   userId?: string,
-): Promise<{ ok: boolean; rating: string }> {
+): Promise<{ ok: boolean; rating: string; extracted: boolean; extract_msg: string }> {
   const res = await fetch(`${BASE_URL}/chat/feedback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

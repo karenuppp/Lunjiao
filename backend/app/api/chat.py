@@ -58,6 +58,7 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     conversation_id: str
+    message_id: str = ""
     data_sources_used: List[str] = []
     chart_config: Optional[dict] = None
     report_text: Optional[str] = None
@@ -99,12 +100,14 @@ async def chat(request: ChatRequest):
     )
 
     _add_to_history(conv_id, "user", request.message)
+    assistant_msg_id = ""
     if isinstance(result.get("answer"), str):
-        _add_to_history(conv_id, "assistant", result["answer"])
+        assistant_msg_id = _add_to_history(conv_id, "assistant", result["answer"]) or ""
 
     return ChatResponse(
         answer=result["answer"],
         conversation_id=conv_id,
+        message_id=assistant_msg_id,
         data_sources_used=result.get("data_sources_used", ["query_data"]),
         chart_config=result.get("chart_config"),
         report_text=result.get("report_text"),
@@ -126,6 +129,7 @@ async def chat_stream(request: ChatRequest):
 
         kb_scope, db_scope, exp_extract_enabled = _resolve_permissions(user_id)
         final_answer = ""
+        agent_msg_id = ""
         data_sources: list[str] = []
         try:
             async for event in run_agent_stream_simple(
@@ -141,6 +145,7 @@ async def chat_stream(request: ChatRequest):
             ):
                 if isinstance(event, FinalAnswerEvent):
                     final_answer = event.text
+                    agent_msg_id = event.message_id
                 elif isinstance(event, DataSourceEvent):
                     data_sources = event.sources
                 yield event.to_sse()
@@ -150,7 +155,7 @@ async def chat_stream(request: ChatRequest):
 
         _add_to_history(conv_id, "user", request.message, template_name=request.category or "")
         if final_answer:
-            msg_id = persistent_store.add_message(conv_id, "assistant", final_answer)
+            msg_id = persistent_store.add_message(conv_id, "assistant", final_answer, msg_id=agent_msg_id)
             if data_sources and msg_id:
                 persistent_store.set_message_sources(conv_id, msg_id, data_sources)
 
@@ -176,6 +181,9 @@ class FeedbackRequest(BaseModel):
 async def submit_feedback(request: FeedbackRequest, background_tasks: BackgroundTasks):
     user_id = request.user_id or "default"
 
+    extracted = False
+    extract_msg = ""
+
     if request.rating == "up":
         can_extract = False
         db = SessionLocal()
@@ -188,6 +196,7 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
 
         if not can_extract:
             logger.info(f"[Feedback:Save] Experience extraction disabled for user={user_id}, skip")
+            extract_msg = "经验提取未启用，请联系管理员开通权限"
         else:
             conv_id, history = _get_or_create_conversation(request.conversation_id)
 
@@ -222,13 +231,16 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
                     msg_id=request.message_id,
                     category=template_name,
                 )
+                extracted = True
+                extract_msg = "经验推送成功"
             else:
                 logger.warning(f"[Feedback:Save] Q&A not found for conv={conv_id}, msg={request.message_id}")
+                extract_msg = "未找到对应问答对，请刷新页面后重试"
 
     # Persist feedback rating to conversation file so it survives re-login
     persistent_store.set_message_feedback(request.conversation_id, request.message_id, request.rating)
 
-    return {"ok": True, "rating": request.rating}
+    return {"ok": True, "rating": request.rating, "extracted": extracted, "extract_msg": extract_msg}
 
 
 def _extract_experiences_bg(

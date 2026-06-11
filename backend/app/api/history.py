@@ -118,11 +118,12 @@ class ConversationStore:
         _write_conv(conv)
         return new_id, conv["messages"]
 
-    def add_message(self, conv_id: str, role: str, content: str, template_name: str = "") -> str | None:
+    def add_message(self, conv_id: str, role: str, content: str, template_name: str = "", msg_id: str = "") -> str | None:
         data = _read_conv(conv_id)
         if not data:
             return None
-        msg_id = f"msg-{len(data['messages']) + 1:03d}"
+        if not msg_id:
+            msg_id = f"msg-{len(data['messages']) + 1:03d}"
         msg_entry = {
             "id": msg_id,
             "role": role,

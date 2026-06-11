@@ -9,6 +9,7 @@ import {
 } from 'react'
 import type { DataCategory, PendingFile, UploadProgressItem, AppView, UserInfo, Message as ChatMessage } from '../types/chat'
 import { sendChatStream, isArchiveFile, uploadFilesBatchWithUser, loginUser, sendFeedback, listConversations, loadMessages, deleteConversation, saveSuggestedExperience, dismissExperienceSuggestion } from '../api/chat'
+import { useToast } from '../components/Toast'
 
 const STORAGE_KEY = 'zhiwei_conversations'
 
@@ -369,6 +370,7 @@ const ChatContext = createContext<ChatContextValue | null>(null)
 export function ChatProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(chatReducer, mergedInitial)
   const abortMapRef = useRef<Map<string, () => void>>(new Map())
+  const toast = useToast()
 
   const persistedRef = useRef(state)
   const lastSaveRef = useRef(0)
@@ -827,12 +829,20 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       })
 
       try {
-        await sendFeedback(convId, messageId, rating)
+        const result = await sendFeedback(convId, messageId, rating)
+        if (rating === 'up') {
+          if (result.extracted) {
+            toast.success(result.extract_msg || '经验推送成功')
+          } else {
+            toast.error(result.extract_msg || '经验提取失败')
+          }
+        }
       } catch (err) {
         console.error('Feedback failed:', err)
+        toast.error('反馈提交失败')
       }
     },
-    [],
+    [toast],
   )
 
   const value: ChatContextValue = {
