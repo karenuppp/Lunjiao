@@ -259,7 +259,10 @@ async def list_files():
 
 if __name__ == "__main__":
     import uvicorn
+    from app.logger import init_logging, get_logger
+    init_logging()
+    logger = get_logger(__name__)
 
     port = int(os.getenv("UPLOAD_SERVER_PORT", "8025"))
-    print(f"Starting MCP Upload Server on http://0.0.0.0:{port}")
+    logger.info(f"[MCP:Upload] Starting on http://0.0.0.0:{port}")
     uvicorn.run(app, host="0.0.0.0", port=port)

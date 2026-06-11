@@ -214,8 +214,11 @@ async def list_tables(req: TablesRequest):
 
 if __name__ == "__main__":
     import uvicorn
+    from app.logger import init_logging, get_logger
+    init_logging()
 
     port = int(os.getenv("MCP_SERVER_PORT", "8024"))
-    print(f"Starting MCP DB Server on http://0.0.0.0:{port}")
-    print(f"Target database: {DB_HOST}:{DB_PORT}/{DB_NAME}")
+    logger = get_logger(__name__)
+    logger.info(f"[MCP:DB] Starting on http://0.0.0.0:{port}")
+    logger.info(f"[MCP:DB] Target database: {DB_HOST}:{DB_PORT}/{DB_NAME}")
     uvicorn.run(app, host="0.0.0.0", port=port)

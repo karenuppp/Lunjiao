@@ -7,6 +7,9 @@ load_dotenv()
 from app.config import settings
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 DATABASE_URL = (
     f"mysql+pymysql://{settings.db_user}:{settings.db_password}@{settings.db_host}:{settings.db_port}/{settings.db_name}"
@@ -75,7 +78,7 @@ def init_db():
                 prompt_content=DEFAULT_SYSTEM_PROMPT,
             ))
             db.commit()
-            print("[Init] Seeded '系统默认' (default) with system prompt")
+            logger.info("[DB:Init] Seeded '系统默认' (default) with system prompt")
         else:
             # Migrate old titles, fill empty content with current default
             updated = False
@@ -87,18 +90,18 @@ def init_db():
                 updated = True
             if updated:
                 db.commit()
-                print("[Init] Migrated existing default → '系统默认' (updated)")
+                logger.info("[DB:Init] Migrated existing default → '系统默认' (updated)")
 
         # Clean up legacy system_default key
         legacy = db.query(SystemPrompt).filter(SystemPrompt.prompt_key == "system_default").first()
         if legacy:
             db.delete(legacy)
             db.commit()
-            print("[Init] Removed legacy system_default template")
+            logger.info("[DB:Init] Removed legacy system_default template")
 
         total = db.query(SystemPrompt).count()
-        print(f"[Init] system_prompt table has {total} row(s)")
+        logger.info(f"[DB:Init] system_prompt table has {total} row(s)")
     except Exception as e:
-        print(f"[Init] Seed failed: {e}")
+        logger.error(f"[DB:Init] Seed failed: {e}")
     finally:
         db.close()

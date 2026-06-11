@@ -12,6 +12,9 @@ from sqlalchemy import desc
 from app.database import SessionLocal
 from app.config import settings
 from app.models.experience import Experience, ExperienceStatus
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def get_available_tags() -> list[str]:
@@ -96,7 +99,7 @@ async def _llm_extract_experiences(
         )
         content = response.choices[0].message.content or ""
     except Exception as e:
-        print(f"[Experience] LLM extraction call failed: {e}")
+        logger.error(f"[Experience:LLM] Extraction call failed: {e}")
         return []
 
     # Parse LLM response — try direct, code block, then truncated recovery
@@ -134,9 +137,9 @@ async def _llm_extract_experiences(
             truncated += '}' * max(0, open_braces)
             try:
                 result = json.loads(truncated)
-                print(f"[Experience] Recovered truncated JSON")
+                logger.warning("[Experience:LLM] Recovered truncated JSON")
             except json.JSONDecodeError:
-                print(f"[Experience] JSON parse failed even after recovery, raw: {content[:300]}")
+                logger.error(f"[Experience:LLM] JSON parse failed after recovery, raw: {content[:300]}")
                 return []
 
     if not result.get("should_save", False):
@@ -173,11 +176,11 @@ async def _index_experience_to_rag(exp: Experience):
         await lightrag.text_chunks.upsert(inserting_chunks)
         await lightrag._insert_done()
     except Exception as e:
-        print(f"[Experience] Vector index failed for exp_{exp.id}: {e}")
+        logger.error(f"[Experience:Vector] Index failed for exp_{exp.id}: {e}")
 
 
 async def _remove_experience_from_rag(exp_id: int, user_id: str):
-    print(f"[Experience] Vector removal requested for exp_{exp_id} (soft-skipped)")
+    logger.info(f"[Experience:Vector] Removal requested for exp_{exp_id} (soft-skipped)")
 
 
 def _compute_recency_weight(created_at, last_accessed) -> float:
@@ -224,7 +227,7 @@ async def _search_vector_only(
 
         rag_instance = rag._rags.get(f"exp_default")
         if not rag_instance or not getattr(rag_instance, "lightrag", None):
-            print("[Experience] LightRAG not initialized, skip vector search")
+            logger.warning("[Experience:Search] LightRAG not initialized, skip vector search")
             return []
 
         lightrag = rag_instance.lightrag
@@ -253,7 +256,7 @@ async def _search_vector_only(
 
         return [{"text": t.strip()} for t in content_parts if t.strip()]
     except Exception as e:
-        print(f"[Experience] Vector search failed: {e}")
+        logger.error(f"[Experience:Search] Vector search failed: {e}")
         return []
 
 
@@ -416,12 +419,12 @@ async def extract_and_save(
             try:
                 await _index_experience_to_rag(exp)
             except Exception as e:
-                print(f"[Experience] Vector index warning for exp_{exp.id}: {e}")
+                logger.warning(f"[Experience:Vector] Index warning for exp_{exp.id}: {e}")
 
             saved_count += 1
     except Exception as e:
         db.rollback()
-        print(f"[Experience] Save failed: {e}")
+        logger.error(f"[Experience:Save] Save failed: {e}")
     finally:
         db.close()
 
@@ -445,7 +448,7 @@ def approve_experience(exp_id: int) -> Experience | None:
             loop.run_until_complete(_index_experience_to_rag(exp))
             loop.close()
         except Exception as e:
-            print(f"[Experience] Vector indexing failed for approval exp_{exp.id}: {e}")
+            logger.error(f"[Experience:Vector] Indexing failed for approval exp_{exp.id}: {e}")
 
         return exp
     finally:
