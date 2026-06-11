@@ -7,6 +7,46 @@ from typing import Optional
 import json
 
 from app.config import settings
+from app.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+def _parse_docx_text(file_path: str) -> str:
+    """Extract text from .docx using LightRAG native parser (python-docx)."""
+    from lightrag.parser.docx.parse_document import extract_docx_blocks
+
+    blocks = extract_docx_blocks(file_path)
+    lines: list[str] = []
+    for b in blocks:
+        heading = b.get("heading", "")
+        content = b.get("content", "")
+        if heading:
+            lines.append(f"## {heading}")
+        if content:
+            lines.append(content)
+    return "\n\n".join(lines)
+
+
+def _convert_doc_to_docx(doc_path: str) -> str:
+    """Convert .doc to .docx via LibreOffice headless, return .docx path."""
+    import subprocess
+
+    out_dir = os.path.dirname(doc_path) or "."
+    result = subprocess.run(
+        [
+            "libreoffice", "--headless", "--convert-to", "docx",
+            "--outdir", out_dir, doc_path,
+        ],
+        capture_output=True, text=True, timeout=60,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"LibreOffice conversion failed: {result.stderr}")
+    base = os.path.splitext(doc_path)[0]
+    docx_path = base + ".docx"
+    if not os.path.exists(docx_path):
+        raise RuntimeError(f"Converted .docx not found at {docx_path}")
+    return docx_path
 
 
 def _create_llm_model_func():
@@ -121,7 +161,7 @@ class RAGEngineAdapter:
             try:
                 await self._init_user_rag(user_id)
             except Exception as e:
-                print(f"[RAG] Init failed for {user_id}: {e}")
+                logger.error(f"[RAG:Init] Init failed for {user_id}: {e}")
 
     def _build_category_map(self) -> dict[str, str]:
         """Build file_path → category mapping from .meta files on disk."""
@@ -169,10 +209,10 @@ class RAGEngineAdapter:
                 with open(file_path, "r", encoding="utf-8") as f:
                     text_content = f.read()
                 if not text_content.strip():
-                    print(f"[RAG-Anything] Empty file: {file_path}")
+                    logger.warning(f"[RAG:Index] Empty file: {file_path}")
                     return "", 0
             except Exception as e:
-                print(f"[RAG-Anything] Read error for {file_path}: {e}")
+                logger.error(f"[RAG:Index] Read error for {file_path}: {e}")
                 return "", 0
 
         elif ext in (".xlsx", ".xls"):
@@ -190,14 +230,45 @@ class RAGEngineAdapter:
                 text_content = "\n".join(lines)
                 wb.close()
                 if not text_content.strip():
-                    print(f"[RAG-Anything] Empty Excel file: {file_path}")
+                    logger.warning(f"[RAG:Index] Empty Excel file: {file_path}")
                     return "", 0
-                print(
-                    f"[RAG-Anything] Extracted Excel {file_name or Path(file_path).name}: "
+                logger.info(
+                    f"[RAG:Index] Extracted Excel {file_name or Path(file_path).name}: "
                     f"{len(lines)} lines, {len(text_content)} chars"
                 )
             except Exception as e:
-                print(f"[RAG-Anything] Excel extraction error for {file_path}: {e}")
+                logger.error(f"[RAG:Index] Excel extraction error for {file_path}: {e}")
+                return "", 0
+
+        elif ext in (".docx",):
+            try:
+                text_content = _parse_docx_text(file_path)
+                if not text_content.strip():
+                    logger.warning(f"[RAG:Index] Empty docx: {file_path}")
+                    return "", 0
+                logger.info(
+                    f"[RAG:Index] Native-parsed DOCX {file_name or Path(file_path).name}: "
+                    f"{len(text_content)} chars"
+                )
+            except Exception as e:
+                logger.error(f"[RAG:Index] DOCX native parse error for {file_path}: {e}")
+                return "", 0
+
+        elif ext in (".doc",):
+            try:
+                docx_path = _convert_doc_to_docx(file_path)
+                text_content = _parse_docx_text(docx_path)
+                os.remove(file_path)
+                file_path = docx_path
+                if not text_content.strip():
+                    logger.warning(f"[RAG:Index] Empty doc (converted): {file_path}")
+                    return "", 0
+                logger.info(
+                    f"[RAG:Index] Converted DOC→DOCX {file_name or Path(file_path).name}: "
+                    f"{len(text_content)} chars"
+                )
+            except Exception as e:
+                logger.error(f"[RAG:Index] DOC conversion error for {file_path}: {e}")
                 return "", 0
 
         chunk_count = 0
@@ -215,13 +286,13 @@ class RAGEngineAdapter:
                     split_by_character=split_char,
                 )
             except Exception as e:
-                print(f"[RAG-Anything] insert_text_content error for {file_name or Path(file_path).name}: {e}")
+                logger.error(f"[RAG:Index] insert_text_content error for {file_name or Path(file_path).name}: {e}")
                 raise RuntimeError(f"文本索引写入失败: {e}") from e
 
             # Estimate chunk count (LightRAG ~1200 tokens ≈ 500-600 chars per chunk)
             chunk_count = max(1, len(text_content) // 500)
-            print(
-                f"[RAG-Anything] Full-pipeline indexed {file_name or Path(file_path).name} "
+            logger.info(
+                f"[RAG:Index] Full-pipeline indexed {file_name or Path(file_path).name} "
                 f"({len(text_content)} chars, ~{chunk_count} chunks)"
             )
         else:
@@ -232,7 +303,7 @@ class RAGEngineAdapter:
                     doc_id=f"{category}::{doc_id}",
                 )
             except Exception as e:
-                print(f"[RAG-Anything] Error indexing {file_path}: {e}")
+                logger.error(f"[RAG:Index] Error indexing (MinerU) {file_path}: {e}")
                 return "", 0
             # Rough estimate for MinerU-parsed documents
             try:
@@ -272,10 +343,10 @@ class RAGEngineAdapter:
                 timeout=settings.rag_query_timeout,
             )
         except asyncio.TimeoutError:
-            print(f"[RAG-Anything] Query timeout after {settings.rag_query_timeout}s")
+            logger.warning(f"[RAG:Query] Timeout after {settings.rag_query_timeout}s")
             return []
         except Exception as e:
-            print(f"[RAG-Anything] Query error: {e}")
+            logger.error(f"[RAG:Query] Error: {e}")
             return []
 
         if not result_text or not result_text.strip():
@@ -335,10 +406,10 @@ class RAGEngineAdapter:
                 timeout=settings.rag_query_timeout,
             )
         except asyncio.TimeoutError:
-            print(f"[RAG-Anything] aquery_data timeout after {settings.rag_query_timeout}s")
+            logger.warning(f"[RAG:Query] aquery_data timeout after {settings.rag_query_timeout}s")
             return []
         except Exception as e:
-            print(f"[RAG-Anything] aquery_data error: {e}")
+            logger.error(f"[RAG:Query] aquery_data error: {e}")
             return []
 
         chunks = []
@@ -396,16 +467,16 @@ class RAGEngineAdapter:
         try:
             result = await lightrag.adelete_by_doc_id(doc_id)
             if result.status == "success":
-                print(f"[RAG-Anything] Deleted doc {doc_id}: {result.message}")
+                logger.info(f"[RAG:Delete] Deleted doc {doc_id}: {result.message}")
                 return True
             elif result.status == "not_found":
-                print(f"[RAG-Anything] Doc {doc_id} not found in RAG storage, treating as deleted")
+                logger.info(f"[RAG:Delete] Doc {doc_id} not found in RAG storage, treating as deleted")
                 return True
             else:
-                print(f"[RAG-Anything] Deletion failed for {doc_id}: {result.message}")
+                logger.error(f"[RAG:Delete] Deletion failed for {doc_id}: {result.message}")
                 return False
         except Exception as e:
-            print(f"[RAG-Anything] Error deleting {doc_id}: {e}")
+            logger.error(f"[RAG:Delete] Error deleting {doc_id}: {e}")
             return False
 
 
