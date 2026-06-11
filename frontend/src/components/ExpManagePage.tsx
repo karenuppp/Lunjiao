@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Table, Button, Modal, Select, Input, Tag, Popconfirm, Space, Tabs } from 'antd'
+import { Table, Button, Modal, Select, Input, Tag, Space, Tabs } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { EditOutlined, DeleteOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons'
 import {
@@ -214,24 +214,24 @@ export default function ExpManagePage() {
               >
                 通过
               </Button>
-              <Popconfirm
-                title="确认驳回"
-                description="确定要驳回这条经验吗？会直接删除。"
-                onConfirm={() => handleReject(record.id)}
-                okText="确认驳回"
-                cancelText="取消"
-                okButtonProps={{ danger: true }}
-                getPopupContainer={() => document.body}
+              <Button
+                type="link"
+                size="small"
+                danger
+                icon={<CloseOutlined />}
+                onClick={() => {
+                  Modal.confirm({
+                    title: '确认驳回',
+                    content: '确定要驳回这条经验吗？会直接删除。',
+                    okText: '确认驳回',
+                    cancelText: '取消',
+                    okButtonProps: { danger: true },
+                    onOk: () => handleReject(record.id),
+                  })
+                }}
               >
-                <Button
-                  type="link"
-                  size="small"
-                  danger
-                  icon={<CloseOutlined />}
-                >
-                  驳回
-                </Button>
-              </Popconfirm>
+                驳回
+              </Button>
             </>
           )}
           <Button
@@ -242,24 +242,24 @@ export default function ExpManagePage() {
           >
             修改
           </Button>
-          <Popconfirm
-            title="确认删除"
-            description="确定要删除这条经验吗？"
-            onConfirm={() => handleDelete(record.id)}
-            okText="确认删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-            getPopupContainer={() => document.body}
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => {
+              Modal.confirm({
+                title: '确认删除',
+                content: '确定要删除这条经验吗？',
+                okText: '确认删除',
+                cancelText: '取消',
+                okButtonProps: { danger: true },
+                onOk: () => handleDelete(record.id),
+              })
+            }}
           >
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-            >
-              删除
-            </Button>
-          </Popconfirm>
+            删除
+          </Button>
         </div>
       ),
     },

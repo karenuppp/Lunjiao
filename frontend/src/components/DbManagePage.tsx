@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Table, Button, Modal, Input, InputNumber, Tag, Space, Popconfirm } from 'antd'
+import { Table, Button, Modal, Input, InputNumber, Tag, Space } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import {
   PlusOutlined,
@@ -199,11 +199,18 @@ export default function DbManagePage() {
               连接
             </Button>
           )}
-          <Popconfirm title="确认删除" description={`确定要删除连接「${record.name}」吗？`} onConfirm={() => handleDelete(record.id)} okText="确认删除" cancelText="取消" okButtonProps={{ danger: true }} getPopupContainer={() => document.body}>
-            <Button size="small" danger icon={<DeleteOutlined />}>
-              删除
-            </Button>
-          </Popconfirm>
+          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => {
+            Modal.confirm({
+              title: '确认删除',
+              content: `确定要删除连接「${record.name}」吗？`,
+              okText: '确认删除',
+              cancelText: '取消',
+              okButtonProps: { danger: true },
+              onOk: () => handleDelete(record.id),
+            })
+          }}>
+            删除
+          </Button>
         </Space>
       ),
     },

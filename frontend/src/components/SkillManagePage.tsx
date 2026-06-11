@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Button, Input, Table, Popconfirm, Spin } from 'antd'
+import { Button, Input, Table, Modal, Spin } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { PlusOutlined, ClearOutlined, EditOutlined, DeleteOutlined, CheckOutlined } from '@ant-design/icons'
 import {
@@ -203,24 +203,24 @@ export default function SkillManagePage() {
           >
             修改
           </Button>
-          <Popconfirm
-            title="确认删除"
-            description={`确定要删除技能「${record.title}」吗？`}
-            onConfirm={() => handleDelete(record.id)}
-            okText="确认删除"
-            cancelText="取消"
-            okButtonProps={{ danger: true }}
-            getPopupContainer={() => document.body}
+          <Button
+            type="link"
+            size="small"
+            danger
+            icon={<DeleteOutlined />}
+            onClick={() => {
+              Modal.confirm({
+                title: '确认删除',
+                content: `确定要删除技能「${record.title}」吗？`,
+                okText: '确认删除',
+                cancelText: '取消',
+                okButtonProps: { danger: true },
+                onOk: () => handleDelete(record.id),
+              })
+            }}
           >
-            <Button
-              type="link"
-              size="small"
-              danger
-              icon={<DeleteOutlined />}
-            >
-              删除
-            </Button>
-          </Popconfirm>
+            删除
+          </Button>
         </div>
       ),
     },

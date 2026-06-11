@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react'
 import {
   Input, Button, Table, Modal, Tag, Empty,
-  Tooltip, Select, Popconfirm,
+  Tooltip, Select,
 } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { InputRef } from 'antd'
@@ -488,21 +488,21 @@ export default function KbManagePage() {
       key: 'actions',
       width: 100,
       render: (_: unknown, record: UploadedFileMeta) => (
-        <Popconfirm
-          title="确认删除"
-          description={`确定要删除「${record.file_name}」吗？此操作不可恢复。`}
-          onConfirm={() => handleDelete(record.file_id)}
-          okText="确认删除"
-          cancelText="取消"
-          okButtonProps={{ danger: true }}
-          getPopupContainer={() => document.body}
-        >
-          <Button
-            type="text" size="small" danger
-            icon={<Trash2 size={14} />}
-            loading={deletingId === record.file_id}
-          />
-        </Popconfirm>
+        <Button
+          type="text" size="small" danger
+          icon={<Trash2 size={14} />}
+          loading={deletingId === record.file_id}
+          onClick={() => {
+            Modal.confirm({
+              title: '确认删除',
+              content: `确定要删除「${record.file_name}」吗？此操作不可恢复。`,
+              okText: '确认删除',
+              cancelText: '取消',
+              okButtonProps: { danger: true },
+              onOk: () => handleDelete(record.file_id),
+            })
+          }}
+        />
       ),
     },
   ]
