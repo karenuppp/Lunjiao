@@ -52,6 +52,7 @@ class Settings:
     talk_dir: str = os.getenv("TALK_DIR", str(Path(__file__).parent.parent.parent / "talk"))
     max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "50"))
     rag_indexing_timeout: int = int(os.getenv("RAG_INDEXING_TIMEOUT", "300"))
+    rag_fast_indexing: bool = os.getenv("RAG_FAST_INDEXING", "false").lower() in ("1", "true", "yes")
     allowed_extensions: list[str] = os.getenv(
         "ALLOWED_EXTENSIONS",
         ".pdf,.docx,.doc,.xlsx,.xls,.pptx,.csv,.txt,.md,.png,.jpg,.jpeg,.zip,.rar,.7z,.tar.gz,.tgz",

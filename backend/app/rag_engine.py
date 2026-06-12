@@ -107,6 +107,84 @@ def _create_embedding_func():
     return emb_func
 
 
+async def _fast_insert_text(lightrag, text: str, doc_id: str, file_path: str) -> int:
+    """Insert text into LightRAG with chunking + embedding only, no entity extraction.
+
+    Much faster than the full pipeline (~50-90 % less LLM calls).
+    Retrieval works with LightRAG naive / mix query modes.
+    """
+    from lightrag.utils import compute_mdhash_id, sanitize_text_for_encoding
+    from lightrag.parser.routing import normalize_document_file_path
+
+    emb_func = _create_embedding_func()
+    text = sanitize_text_for_encoding(text)
+    file_path = normalize_document_file_path(file_path)
+
+    # Simple paragraph-based chunking with token-aware split
+    chunk_token_size = 800
+    paragraphs = text.split("\n\n")
+    chunks: list[str] = []
+    current = ""
+    current_tokens = 0
+    for para in paragraphs:
+        para_tokens = len(lightrag.tokenizer.encode(para))
+        if current_tokens + para_tokens > chunk_token_size and current:
+            chunks.append(current.strip())
+            current = para
+            current_tokens = para_tokens
+        else:
+            current = current + "\n\n" + para if current else para
+            current_tokens += para_tokens
+    if current.strip():
+        chunks.append(current.strip())
+
+    if not chunks:
+        logger.warning(f"[RAG:FastInsert] No chunks produced for {file_path}")
+        return 0
+
+    # Generate doc_id
+    doc_key = compute_mdhash_id(text, prefix="doc-") if not doc_id else doc_id
+
+    # Deduplicate: skip if doc already exists
+    existing = await lightrag.full_docs.filter_keys({doc_key})
+    if doc_key not in existing:
+        logger.info(f"[RAG:FastInsert] Doc {doc_key} already exists, skip")
+        return 0
+
+    # Build chunk entries
+    inserting_chunks: dict[str, dict] = {}
+    for idx, chunk_text in enumerate(chunks):
+        chunk_key = compute_mdhash_id(chunk_text, prefix="chunk-")
+        tokens = len(lightrag.tokenizer.encode(chunk_text))
+        inserting_chunks[chunk_key] = {
+            "content": chunk_text,
+            "full_doc_id": doc_key,
+            "tokens": tokens,
+            "chunk_order_index": idx,
+            "file_path": file_path,
+        }
+
+    # Generate embeddings for all chunks at once
+    chunk_texts = [c["content"] for c in inserting_chunks.values()]
+    embeddings = emb_func(chunk_texts)
+    for key, emb in zip(inserting_chunks.keys(), embeddings):
+        inserting_chunks[key]["vector"] = emb.tolist()
+
+    # Write to LightRAG storages
+    new_docs = {doc_key: {"content": text, "file_path": file_path}}
+    await asyncio.gather(
+        lightrag.chunks_vdb.upsert(inserting_chunks),
+        lightrag.text_chunks.upsert(inserting_chunks),
+        lightrag.full_docs.upsert(new_docs),
+    )
+
+    logger.info(
+        f"[RAG:FastInsert] Indexed {len(chunks)} chunks "
+        f"({sum(c['tokens'] for c in inserting_chunks.values())} tokens)"
+    )
+    return len(chunks)
+
+
 class RAGEngineAdapter:
 
     def __init__(self):
@@ -273,28 +351,44 @@ class RAGEngineAdapter:
 
         chunk_count = 0
         if text_content is not None:
-            # Use insert_text_content for full LightRAG pipeline:
-            # chunking → entity extraction → relation graph → vector index
-            from raganything.utils import insert_text_content
-            try:
-                split_char = '\n\n' if ext in ('.txt', '.md') else None
-                await insert_text_content(
-                    lightrag=user_rag.lightrag,
-                    input=text_content,
-                    ids=doc_id,
-                    file_paths=file_path,
-                    split_by_character=split_char,
-                )
-            except Exception as e:
-                logger.error(f"[RAG:Index] insert_text_content error for {file_name or Path(file_path).name}: {e}")
-                raise RuntimeError(f"文本索引写入失败: {e}") from e
+            if settings.rag_fast_indexing:
+                # Fast: chunk + embed only, skip entity extraction
+                try:
+                    chunk_count = await _fast_insert_text(
+                        lightrag=user_rag.lightrag,
+                        text=text_content,
+                        doc_id=doc_id,
+                        file_path=file_path,
+                    )
+                    logger.info(
+                        f"[RAG:FastIndex] Fast-indexed {file_name or Path(file_path).name} "
+                        f"({len(text_content)} chars, {chunk_count} chunks)"
+                    )
+                except Exception as e:
+                    logger.error(f"[RAG:FastIndex] Fast insert error for {file_name or Path(file_path).name}: {e}")
+                    raise RuntimeError(f"快速索引写入失败: {e}") from e
+            else:
+                # Full pipeline: chunking → entity extraction → relation graph → vector index
+                from raganything.utils import insert_text_content
+                try:
+                    split_char = '\n\n' if ext in ('.txt', '.md') else None
+                    await insert_text_content(
+                        lightrag=user_rag.lightrag,
+                        input=text_content,
+                        ids=doc_id,
+                        file_paths=file_path,
+                        split_by_character=split_char,
+                    )
+                except Exception as e:
+                    logger.error(f"[RAG:Index] insert_text_content error for {file_name or Path(file_path).name}: {e}")
+                    raise RuntimeError(f"文本索引写入失败: {e}") from e
 
-            # Estimate chunk count (LightRAG ~1200 tokens ≈ 500-600 chars per chunk)
-            chunk_count = max(1, len(text_content) // 500)
-            logger.info(
-                f"[RAG:Index] Full-pipeline indexed {file_name or Path(file_path).name} "
-                f"({len(text_content)} chars, ~{chunk_count} chunks)"
-            )
+                # Estimate chunk count (LightRAG ~1200 tokens ≈ 500-600 chars per chunk)
+                chunk_count = max(1, len(text_content) // 500)
+                logger.info(
+                    f"[RAG:Index] Full-pipeline indexed {file_name or Path(file_path).name} "
+                    f"({len(text_content)} chars, ~{chunk_count} chunks)"
+                )
         else:
             try:
                 await user_rag.process_document_complete(
@@ -331,8 +425,9 @@ class RAGEngineAdapter:
                     lightrag, query_text, category, top_k, user_id
                 )
 
+            mode = "naive" if settings.rag_fast_indexing else "mix"
             param = QueryParam(
-                mode="mix",
+                mode=mode,
                 only_need_context=False,
                 top_k=settings.rag_chunk_top_k,
                 chunk_top_k=settings.rag_chunk_top_k,
@@ -392,8 +487,9 @@ class RAGEngineAdapter:
         """Search LightRAG with structured results, then filter by category."""
         from lightrag.base import QueryParam
 
+        mode = "naive" if settings.rag_fast_indexing else "mix"
         param = QueryParam(
-            mode="mix",
+            mode=mode,
             only_need_context=False,
             top_k=settings.rag_chunk_top_k,
             chunk_top_k=settings.rag_chunk_top_k,
