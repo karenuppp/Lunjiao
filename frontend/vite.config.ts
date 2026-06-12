@@ -12,4 +12,17 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    target: 'es2020',
+    cssTarget: 'chrome80',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', 'react-router-dom'],
+          antd: ['antd', '@ant-design/icons'],
+          charts: ['echarts', 'echarts-for-react'],
+        },
+      },
+    },
+  },
 })
