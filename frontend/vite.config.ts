@@ -17,10 +17,10 @@ export default defineConfig({
     cssTarget: 'chrome80',
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          antd: ['antd', '@ant-design/icons'],
-          charts: ['echarts', 'echarts-for-react'],
+        manualChunks(id: string) {
+          if (id.includes('node_modules/react') || id.includes('node_modules/react-dom') || id.includes('node_modules/react-router')) return 'vendor'
+          if (id.includes('node_modules/antd') || id.includes('node_modules/@ant-design')) return 'antd'
+          if (id.includes('node_modules/echarts')) return 'charts'
         },
       },
     },
