@@ -244,6 +244,26 @@ export default function AppHeader({
       >
         <div style={{ marginTop: 8, maxHeight: 460, overflowY: 'auto', lineHeight: 1.8, fontSize: 14 }}>
           <div style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, color: '#4F46E5', marginBottom: 4, fontSize: 15 }}>v0.8</div>
+            <div style={{ fontWeight: 600, color: '#1a1b2e', marginBottom: 6 }}>2026-06-15</div>
+            <ul style={{ margin: 0, paddingLeft: 20, color: '#4b5563' }}>
+              <li>新增 Docker 沙箱代码执行能力，agent 可在安全隔离容器中运行 Python 脚本</li>
+              <li>新增智能问答页沙箱状态标签，实时显示「技能已装备/未预备」</li>
+              <li>新增回答内容下载导出：长文本（&gt;500字）可下载为 .docx，大表格（&gt;10行）可下载为 .xlsx</li>
+              <li>新增对话删除时级联清理聊天上传文件，节省存储空间</li>
+              <li>公用知识库标签改为多选模式，支持同时设置多个标签</li>
+              <li>修复点赞经验提取假成功问题，改为同步执行确保准确性</li>
+              <li>修复全站删除按钮点击无反应问题，统一改为受控 Modal</li>
+              <li>修复浏览器刷新后返回登录页问题（localStorage 初始化登录状态）</li>
+              <li>修复上传弹窗重新打开时残留上次文件状态</li>
+              <li>修复索引失败文件的状态提示不显示具体错误信息</li>
+              <li>优化 RAG 检索顺序：统一公共知识库→个人知识库，category 标签精确过滤</li>
+              <li>优化 KB 上传按钮与当前筛选范围（个人/公用）绑定</li>
+              <li>经验管理筛选项精简，移除已归档 Tab</li>
+            </ul>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 700, color: '#4F46E5', marginBottom: 4, fontSize: 15 }}>v0.2</div>
             <div style={{ fontWeight: 600, color: '#1a1b2e', marginBottom: 6 }}>2026-06-05</div>
             <ul style={{ margin: 0, paddingLeft: 20, color: '#4b5563' }}>
