@@ -26,6 +26,7 @@ export default function SkillManagePage() {
   const toast = useToast()
   const [skills, setSkills] = useState<SkillRecord[]>([])
   const [loading, setLoading] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<SkillRecord | null>(null)
 
   // Form state
   const [title, setTitle] = useState('')
@@ -136,6 +137,7 @@ export default function SkillManagePage() {
       await deleteSkill(id)
       toast.success('删除成功')
       if (editingId === id) resetForm()
+      setDeleteTarget(null)
       await fetchSkills()
     } catch (err: any) {
       toast.error('删除失败: ' + err.message)
@@ -208,16 +210,7 @@ export default function SkillManagePage() {
             size="small"
             danger
             icon={<DeleteOutlined />}
-            onClick={() => {
-              Modal.confirm({
-                title: '确认删除',
-                content: `确定要删除技能「${record.title}」吗？`,
-                okText: '确认删除',
-                cancelText: '取消',
-                okButtonProps: { danger: true },
-                onOk: () => handleDelete(record.id),
-              })
-            }}
+            onClick={() => setDeleteTarget(record)}
           >
             删除
           </Button>
@@ -315,6 +308,21 @@ export default function SkillManagePage() {
           size="middle"
         />
       </div>
+
+      <Modal
+        title="确认删除"
+        open={deleteTarget !== null}
+        onOk={() => handleDelete(deleteTarget!.id)}
+        onCancel={() => setDeleteTarget(null)}
+        okText="确认删除"
+        cancelText="取消"
+        okButtonProps={{ danger: true }}
+        destroyOnClose
+      >
+        {deleteTarget && (
+          <p>确定要删除技能「{deleteTarget.title}」吗？</p>
+        )}
+      </Modal>
     </div>
   )
 }

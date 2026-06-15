@@ -66,13 +66,19 @@ const RAG_STATUS_MAP: Record<string, { color: string; label: string }> = {
   failed:  { color: 'red', label: '索引失败' },
 }
 
-function UploadModalBody({ onDone }: { onDone: () => void }) {
+function UploadModalBody({ onDone, scope }: { onDone: () => void; scope: 'all' | 'public' | 'personal' }) {
   const {
     pendingFiles, uploadProgress, isUploading,
-    addPendingFiles, removePendingFile, clearPendingFiles,
+    addPendingFiles, removePendingFile, clearPendingFiles, clearUploadProgress,
     confirmUpload,
   } = useChat()
   const toast = useToast()
+
+  // Clear stale upload state on mount
+  useEffect(() => {
+    clearPendingFiles()
+    clearUploadProgress()
+  }, [])
 
   const [dragOver, setDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -92,7 +98,8 @@ function UploadModalBody({ onDone }: { onDone: () => void }) {
   )
 
   const handleConfirmUpload = async () => {
-    await confirmUpload()
+    const targetUserId = scope === 'public' ? 'default' : undefined
+    await confirmUpload(targetUserId)
     clearPendingFiles()
     toast.success('上传成功')
     justCompletedRef.current = true
@@ -266,10 +273,12 @@ export default function KbManagePage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<UploadedFileMeta | null>(null)
+  const [batchDeleteOpen, setBatchDeleteOpen] = useState(false)
   const [selectedRowKeys, setSelectedRowKeys] = useState<React.Key[]>([])
 
   const [templates, setTemplates] = useState<PromptTemplate[]>([])
-  const [pendingTags, setPendingTags] = useState<Record<string, string>>({})
+  const [pendingTags, setPendingTags] = useState<Record<string, string[]>>({})
   const [savingTags, setSavingTags] = useState<Record<string, boolean>>({})
 
   const searchInputRef = useRef<InputRef>(null)
@@ -282,7 +291,8 @@ export default function KbManagePage() {
 
   const tagOptions = templates.map(t => ({ value: t.title, label: t.title }))
 
-  const handleSaveTag = async (fileId: string, category: string) => {
+  const handleSaveTag = async (fileId: string, tags: string[]) => {
+    const category = tags.join(',')
     setSavingTags(prev => ({ ...prev, [fileId]: true }))
     try {
       await updateFileCategory(fileId, category)
@@ -346,61 +356,58 @@ export default function KbManagePage() {
       setFiles(prev => prev.filter(f => f.file_id !== fileId))
       setSelectedRowKeys(prev => prev.filter(k => k !== fileId))
       toast.success('删除成功')
-    } catch {
+    } catch (err) {
       toast.error('删除失败')
     } finally {
       setDeletingId(null)
+      setDeleteTarget(null)
     }
   }
 
   const handleBatchDelete = async () => {
     if (selectedRowKeys.length === 0) return
-    Modal.confirm({
-      title: '确认批量删除',
-      content: `确定要删除选中的 ${selectedRowKeys.length} 个文件吗？此操作不可恢复。`,
-      okText: '确认删除',
-      okButtonProps: { danger: true },
-      cancelText: '取消',
-      onOk: async () => {
-        let successCount = 0
-        for (const fileId of selectedRowKeys) {
-          try {
-            await deleteUploadedFile(fileId as string, userId)
-            setFiles(prev => prev.filter(f => f.file_id !== fileId))
-            successCount++
-          } catch {
-          }
-        }
-        setSelectedRowKeys([])
-        if (successCount > 0) toast.success(`成功删除 ${successCount} 个文件`)
-      },
-    })
+    setBatchDeleteOpen(true)
+  }
+
+  const executeBatchDelete = async () => {
+    let successCount = 0
+    for (const fileId of selectedRowKeys) {
+      try {
+        await deleteUploadedFile(fileId as string, userId)
+        setFiles(prev => prev.filter(f => f.file_id !== fileId))
+        successCount++
+      } catch {
+      }
+    }
+    setSelectedRowKeys([])
+    setBatchDeleteOpen(false)
+    if (successCount > 0) toast.success(`成功删除 ${successCount} 个文件`)
   }
 
   const tagColumn = {
     title: '标签',
     dataIndex: 'category',
     key: 'category',
-    width: 200,
+    width: 220,
     render: (_cat: string | undefined, record: UploadedFileMeta) => {
       const rawCat = record.category ?? ''
       const effectiveCat = rawCat === '上传文件' ? '' : rawCat
-      const currentCat = pendingTags[record.file_id] ?? effectiveCat
+      const effectiveTags = effectiveCat ? effectiveCat.split(',').filter(Boolean) : []
+      const currentTags = pendingTags[record.file_id] ?? effectiveTags
       const isSaving = savingTags[record.file_id]
-      const hasChanged = currentCat !== effectiveCat && currentCat !== ''
-      const displayValue = currentCat || undefined
+      const hasChanged = currentTags.join(',') !== effectiveTags.join(',')
 
       return (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <Select
-            value={displayValue}
+            mode="multiple"
+            value={currentTags}
             placeholder="无"
             size="small"
             style={{ flex: 1, minWidth: 120 }}
             options={tagOptions}
-            allowClear
             onChange={(val) => {
-              setPendingTags(prev => ({ ...prev, [record.file_id]: val || '' }))
+              setPendingTags(prev => ({ ...prev, [record.file_id]: val }))
             }}
           />
           {hasChanged && !isSaving && (
@@ -409,7 +416,7 @@ export default function KbManagePage() {
                 type="text"
                 size="small"
                 icon={<Check size={14} style={{ color: '#10B981' }} />}
-                onClick={() => handleSaveTag(record.file_id, currentCat)}
+                onClick={() => handleSaveTag(record.file_id, currentTags)}
               />
             </Tooltip>
           )}
@@ -450,9 +457,13 @@ export default function KbManagePage() {
       dataIndex: 'rag_status',
       key: 'rag_status',
       width: 100,
-      render: (status: string) => {
+      render: (status: string, record: UploadedFileMeta) => {
         const cfg = RAG_STATUS_MAP[status] || { color: 'default', label: status }
-        return <Tag color={cfg.color}>{cfg.label}</Tag>
+        const tag = <Tag color={cfg.color}>{cfg.label}</Tag>
+        if (status === 'failed' && record.rag_error) {
+          return <Tooltip title={record.rag_error} placement="top">{tag}</Tooltip>
+        }
+        return tag
       },
       filters: [
         { text: '已索引', value: 'indexed' },
@@ -492,16 +503,7 @@ export default function KbManagePage() {
           type="text" size="small" danger
           icon={<Trash2 size={14} />}
           loading={deletingId === record.file_id}
-          onClick={() => {
-            Modal.confirm({
-              title: '确认删除',
-              content: `确定要删除「${record.file_name}」吗？此操作不可恢复。`,
-              okText: '确认删除',
-              cancelText: '取消',
-              okButtonProps: { danger: true },
-              onOk: () => handleDelete(record.file_id),
-            })
-          }}
+          onClick={() => setDeleteTarget(record)}
         />
       ),
     },
@@ -608,7 +610,36 @@ export default function KbManagePage() {
         destroyOnClose
         styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }}
       >
-        <UploadModalBody onDone={() => { setUploadOpen(false); loadFiles() }} />
+        <UploadModalBody scope={scope} onDone={() => { setUploadOpen(false); loadFiles() }} />
+      </Modal>
+
+      <Modal
+        title="确认删除"
+        open={deleteTarget !== null}
+        onOk={() => handleDelete(deleteTarget!.file_id)}
+        onCancel={() => setDeleteTarget(null)}
+        okText="确认删除"
+        cancelText="取消"
+        okButtonProps={{ danger: true }}
+        confirmLoading={deletingId !== null}
+        destroyOnClose
+      >
+        {deleteTarget && (
+          <p>确定要删除「{deleteTarget.file_name}」吗？此操作不可恢复。</p>
+        )}
+      </Modal>
+
+      <Modal
+        title="确认批量删除"
+        open={batchDeleteOpen}
+        onOk={executeBatchDelete}
+        onCancel={() => setBatchDeleteOpen(false)}
+        okText="确认删除"
+        cancelText="取消"
+        okButtonProps={{ danger: true }}
+        destroyOnClose
+      >
+        <p>确定要删除选中的 {selectedRowKeys.length} 个文件吗？此操作不可恢复。</p>
       </Modal>
     </div>
   )

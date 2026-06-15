@@ -28,21 +28,29 @@ async def query_rag(query_text: str, category: str = "", top_k: int = 5,
         return list(results) if results else []
 
     try:
-        all_results = await asyncio.wait_for(
-            _do_search(user_id),
-            timeout=settings.rag_query_timeout + 5,
-        )
-
+        # Always search public KB first, then personal KB.
+        # When a category is specified, the RAG engine's _search_with_category
+        # performs exact-match filtering — only files tagged with that
+        # exact category are returned.
         if include_public and user_id != "default":
-            public_results = await asyncio.wait_for(
+            all_results = await asyncio.wait_for(
                 _do_search("default"),
                 timeout=settings.rag_query_timeout + 5,
             )
+            personal_results = await asyncio.wait_for(
+                _do_search(user_id),
+                timeout=settings.rag_query_timeout + 5,
+            )
             seen = {r.get("text", "") for r in all_results}
-            for r in public_results:
+            for r in personal_results:
                 if r.get("text", "") not in seen:
                     all_results.append(r)
                     seen.add(r.get("text", ""))
+        else:
+            all_results = await asyncio.wait_for(
+                _do_search(user_id),
+                timeout=settings.rag_query_timeout + 5,
+            )
 
         if not all_results:
             if category:
@@ -354,6 +362,40 @@ async def use_skill(skill_name: str) -> str:
         db.close()
 
 
+async def run_code(code: str, timeout: int = 60) -> str:
+    """Execute Python code in a secure Docker sandbox.
+
+    Runs the provided Python code inside an isolated container with
+    no network access, limited memory/CPU, and read-only filesystem.
+    Use this when a skill workflow requires data analysis, chart
+    generation, or computation.
+    """
+    from app.sandbox import run_code as _sandbox_run, is_available
+
+    if not is_available():
+        return (
+            "[Sandbox Unavailable] Docker is not running or sandbox is "
+            "disabled on this server. Contact the administrator to enable "
+            "the sandbox feature."
+        )
+
+    # Defense-in-depth: reject obviously dangerous patterns before
+    # spawning a container. Docker isolation is the real guard.
+    dangerous = [
+        "os.system(", "subprocess.", "shutil.rmtree",
+        "__import__(", "compile(", "pty.spawn",
+    ]
+    code_lower = code.lower()
+    for pattern in dangerous:
+        if pattern.lower() in code_lower:
+            return (
+                f"[Sandbox Rejected] Code contains blocked pattern "
+                f"'{pattern}'. This is not allowed in the sandbox."
+            )
+
+    return await _sandbox_run(code, timeout=timeout)
+
+
 TOOL_FUNCTIONS: dict[str, callable] = {
     "query_rag": query_rag,
     "list_db_connections": list_db_connections,
@@ -362,6 +404,7 @@ TOOL_FUNCTIONS: dict[str, callable] = {
     "query_experience": query_experience,
     "find_file_by_name": find_file_by_name,
     "use_skill": use_skill,
+    "run_code": run_code,
 }
 
 TOOL_SCHEMAS: list[dict] = [
@@ -495,6 +538,28 @@ TOOL_SCHEMAS: list[dict] = [
                     }
                 },
                 "required": ["sql_query", "connection_id"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_code",
+            "description": "Execute Python code in a secure Docker sandbox with no network access. Use this when a skill workflow requires data analysis, chart generation, or computation. The sandbox has pandas, numpy, matplotlib, plotly, openpyxl, and tabulate pre-installed. Use print() to output results.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "type": "string",
+                        "description": "The Python 3.12 source code to execute in the sandbox. Use print() to output results. Avoid os.system, subprocess, or file I/O — the filesystem is read-only and network is disabled."
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Maximum execution time in seconds (default 60, max 120).",
+                        "default": 60
+                    }
+                },
+                "required": ["code"]
             }
         }
     },

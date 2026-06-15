@@ -32,6 +32,15 @@ DEFAULT_SYSTEM_PROMPT = """\
 | `list_db_tables` | 查看某数据库的表和字段 | 确定数据库连接后，了解表结构 |
 | `query_db` | 执行只读 SQL 查询 | 明确查询目标后执行 |
 | `use_skill` | 加载预设技能流程 | 问题匹配已有技能时调用 |
+| `run_code` | 在安全沙箱中执行 Python 代码 | 技能流程需要数据分析、图表生成或计算时使用 |
+
+## 代码执行说明
+
+- 当技能要求运行 Python 代码时，提取代码块中的 Python 代码，调用 `run_code` 工具执行
+- 沙箱已预装：pandas、numpy、matplotlib、plotly、openpyxl、tabulate
+- 沙箱无网络访问，无法下载数据或安装包
+- 使用 `print()` 输出结果，不要依赖文件写入（文件系统只读）
+- 需要超时控制时，可传递 `timeout` 参数（默认 60 秒，最大 120 秒）
 
 ## 注意事项
 

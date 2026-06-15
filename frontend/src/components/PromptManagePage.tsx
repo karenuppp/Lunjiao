@@ -15,6 +15,7 @@ export default function PromptManagePage() {
   const toast = useToast()
   const [templates, setTemplates] = useState<PromptTemplate[]>([])
   const [loading, setLoading] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<PromptTemplate | null>(null)
 
   // Form state
   const [title, setTitle] = useState('')
@@ -95,6 +96,7 @@ export default function PromptManagePage() {
       await deletePromptTemplate(id)
       toast.success('删除成功')
       if (editingId === id) resetForm()
+      setDeleteTarget(null)
       await fetchTemplates()
     } catch (err: any) {
       toast.error('删除失败: ' + err.message)
@@ -152,16 +154,7 @@ export default function PromptManagePage() {
               size="small"
               danger
               icon={<DeleteOutlined />}
-              onClick={() => {
-                Modal.confirm({
-                  title: '确认删除',
-                  content: `确定要删除提示词「${record.title}」吗？`,
-                  okText: '确认删除',
-                  cancelText: '取消',
-                  okButtonProps: { danger: true },
-                  onOk: () => handleDelete(record.id),
-                })
-              }}
+              onClick={() => setDeleteTarget(record)}
             >
               删除
             </Button>
@@ -246,6 +239,21 @@ export default function PromptManagePage() {
           size="middle"
         />
       </div>
+
+      <Modal
+        title="确认删除"
+        open={deleteTarget !== null}
+        onOk={() => handleDelete(deleteTarget!.id)}
+        onCancel={() => setDeleteTarget(null)}
+        okText="确认删除"
+        cancelText="取消"
+        okButtonProps={{ danger: true }}
+        destroyOnClose
+      >
+        {deleteTarget && (
+          <p>确定要删除提示词「{deleteTarget.title}」吗？</p>
+        )}
+      </Modal>
     </div>
   )
 }

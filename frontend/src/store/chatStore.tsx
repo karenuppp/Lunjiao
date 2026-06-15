@@ -84,11 +84,16 @@ const initialState: ChatState = {
 }
 
 const persisted = loadFromStorage()
+const savedUserId = localStorage.getItem('zhiwei_user_id')
+const savedRole = localStorage.getItem('zhiwei_role')
 const mergedInitial: ChatState = {
   ...initialState,
   conversations: persisted.conversations ?? initialState.conversations,
   activeConversationId: persisted.activeConversationId ?? initialState.activeConversationId,
   uploadedFiles: persisted.uploadedFiles ?? initialState.uploadedFiles,
+  loggedIn: !!savedUserId,
+  userId: savedUserId || '',
+  role: savedRole || '',
 }
 
 type ChatAction =
@@ -357,7 +362,7 @@ interface ChatContextValue {
   removePendingFile: (uid: string) => void
   clearPendingFiles: () => void
   clearUploadProgress: () => void
-  confirmUpload: () => Promise<void>
+  confirmUpload: (targetUserId?: string) => Promise<void>
   login: (account: string, password: string) => Promise<UserInfo>
   logout: () => void
   sendFeedback: (messageId: string, rating: 'up' | 'down') => void
@@ -590,10 +595,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const uploadFile = useCallback(async (file: File, userId?: string): Promise<UploadedFileMeta | null> => {
     const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
     const currentUserId = userId || localStorage.getItem('zhiwei_user_id') || 'default'
+    const convId = persistedRef.current.activeConversationId || ''
     const formData = new FormData()
     formData.append('file', file)
     formData.append('user_id', currentUserId)
     formData.append('source', 'chat')
+    formData.append('conv_id', convId)
 
     try {
       const res = await fetch(`${BASE_URL}/upload`, {
@@ -658,11 +665,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     dispatch({ type: 'CLEAR_UPLOAD_PROGRESS' })
   }, [])
 
-  const confirmUpload = useCallback(async () => {
+  const confirmUpload = useCallback(async (targetUserId?: string) => {
     const pending = persistedRef.current.pendingFiles
     if (pending.length === 0) return
 
-    const userId = localStorage.getItem('zhiwei_user_id') || 'default'
+    const userId = targetUserId || localStorage.getItem('zhiwei_user_id') || 'default'
 
     const progress = pending.map<UploadProgressItem>((pf) => ({
       uid: pf.uid,

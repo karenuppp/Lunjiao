@@ -76,10 +76,11 @@ def _create_llm_model_func():
 
 
 def _create_embedding_func():
+    import asyncio
     import numpy as np
     import httpx
     from lightrag.utils import wrap_embedding_func_with_attrs
-    base_url = settings.embedding_base_url.rstrip("/").replace("/v1", "")
+    base_url = settings.embedding_base_url.rstrip("/").removesuffix("/v1")
     api_key = settings.embedding_api_key
 
     embedding_dim_val = settings.embedding_dim
@@ -91,14 +92,36 @@ def _create_embedding_func():
             texts = [texts]
         data = {"model": embedding_model_val, "input": texts}
         headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(
-                f"{base_url}/v1/embeddings", json=data, headers=headers,
-            )
-            if resp.status_code != 200:
-                raise RuntimeError(
-                    f"Embedding API error {resp.status_code}: {resp.text[:200]}"
+        url = f"{base_url}/v1/embeddings"
+        max_retries = 3
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    resp = await client.post(url, json=data, headers=headers)
+                    if resp.status_code == 200:
+                        break
+                    last_error = RuntimeError(
+                        f"Embedding API error {resp.status_code}: {resp.text[:300]}"
+                    )
+                    if resp.status_code < 500:
+                        raise last_error
+            except httpx.TimeoutException as e:
+                last_error = RuntimeError(f"Embedding API timeout: {url}")
+            except RuntimeError:
+                raise
+            except Exception as e:
+                last_error = e
+            if attempt < max_retries - 1:
+                wait = 2 ** attempt
+                logger.warning(
+                    f"[RAG:Embed] Attempt {attempt + 1}/{max_retries} failed, "
+                    f"retrying in {wait}s..."
                 )
+                await asyncio.sleep(wait)
+        else:
+            raise last_error  # type: ignore[misc]
+
         body = resp.json()
         sorted_data = sorted(body["data"], key=lambda x: x["index"])
         embeddings = [d["embedding"] for d in sorted_data]
@@ -114,7 +137,12 @@ async def _fast_insert_text(lightrag, text: str, doc_id: str, file_path: str) ->
     Retrieval works with LightRAG naive / mix query modes.
     """
     from lightrag.utils import compute_mdhash_id, sanitize_text_for_encoding
-    from lightrag.parser.routing import normalize_document_file_path
+
+    # normalize_document_file_path moved between LightRAG versions
+    try:
+        from lightrag.parser.routing import normalize_document_file_path
+    except ImportError:
+        from lightrag.utils_pipeline import normalize_document_file_path
 
     emb_func = _create_embedding_func()
     text = sanitize_text_for_encoding(text)
@@ -145,10 +173,11 @@ async def _fast_insert_text(lightrag, text: str, doc_id: str, file_path: str) ->
     # Generate doc_id
     doc_key = compute_mdhash_id(text, prefix="doc-") if not doc_id else doc_id
 
-    # Deduplicate: skip if doc already exists
-    existing = await lightrag.full_docs.filter_keys({doc_key})
-    if doc_key not in existing:
-        logger.info(f"[RAG:FastInsert] Doc {doc_key} already exists, skip")
+    # Deduplicate: filter_keys returns keys NOT in storage (need insertion).
+    # If doc_key is NOT in the returned set, it already exists → skip.
+    new_keys = await lightrag.full_docs.filter_keys({doc_key})
+    if doc_key not in new_keys:
+        logger.info(f"[RAG:FastInsert] Doc {doc_key} already in storage, skip")
         return 0
 
     # Build chunk entries
@@ -166,7 +195,7 @@ async def _fast_insert_text(lightrag, text: str, doc_id: str, file_path: str) ->
 
     # Generate embeddings for all chunks at once
     chunk_texts = [c["content"] for c in inserting_chunks.values()]
-    embeddings = emb_func(chunk_texts)
+    embeddings = await emb_func(chunk_texts)
     for key, emb in zip(inserting_chunks.keys(), embeddings):
         inserting_chunks[key]["vector"] = emb.tolist()
 
@@ -176,6 +205,13 @@ async def _fast_insert_text(lightrag, text: str, doc_id: str, file_path: str) ->
         lightrag.chunks_vdb.upsert(inserting_chunks),
         lightrag.text_chunks.upsert(inserting_chunks),
         lightrag.full_docs.upsert(new_docs),
+    )
+
+    # Flush to disk — critical for multi-worker and persistence across restarts
+    await asyncio.gather(
+        lightrag.chunks_vdb.index_done_callback(),
+        lightrag.text_chunks.index_done_callback(),
+        lightrag.full_docs.index_done_callback(),
     )
 
     logger.info(

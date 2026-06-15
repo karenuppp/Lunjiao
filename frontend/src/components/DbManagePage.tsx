@@ -25,6 +25,7 @@ export default function DbManagePage() {
   const toast = useToast()
   const [connections, setConnections] = useState<DbConnectionRecord[]>([])
   const [loading, setLoading] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<DbConnectionRecord | null>(null)
 
   const fetchConnections = useCallback(async () => {
     setLoading(true)
@@ -156,6 +157,7 @@ export default function DbManagePage() {
     try {
       await deleteDbConnection(id)
       toast.success('删除成功')
+      setDeleteTarget(null)
       fetchConnections()
     } catch (err: any) {
       toast.error('删除失败: ' + err.message)
@@ -199,16 +201,7 @@ export default function DbManagePage() {
               连接
             </Button>
           )}
-          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => {
-            Modal.confirm({
-              title: '确认删除',
-              content: `确定要删除连接「${record.name}」吗？`,
-              okText: '确认删除',
-              cancelText: '取消',
-              okButtonProps: { danger: true },
-              onOk: () => handleDelete(record.id),
-            })
-          }}>
+          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => setDeleteTarget(record)}>
             删除
           </Button>
         </Space>
@@ -407,6 +400,21 @@ export default function DbManagePage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        title="确认删除"
+        open={deleteTarget !== null}
+        onOk={() => handleDelete(deleteTarget!.id)}
+        onCancel={() => setDeleteTarget(null)}
+        okText="确认删除"
+        cancelText="取消"
+        okButtonProps={{ danger: true }}
+        destroyOnClose
+      >
+        {deleteTarget && (
+          <p>确定要删除连接「{deleteTarget.name}」吗？</p>
+        )}
       </Modal>
     </div>
   )

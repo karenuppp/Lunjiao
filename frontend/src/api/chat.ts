@@ -684,3 +684,9 @@ export async function submitOpinion(content: string): Promise<{ ok: boolean }> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
+
+export async function checkSandboxStatus(): Promise<{ available: boolean }> {
+  const res = await fetch(`${BASE_URL}/sandbox/status`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}

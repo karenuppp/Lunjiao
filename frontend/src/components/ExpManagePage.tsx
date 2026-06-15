@@ -17,7 +17,6 @@ const STATUS_TABS = [
   { key: '', label: '全部' },
   { key: 'active', label: '活跃' },
   { key: 'pending', label: '待审核' },
-  { key: 'archived', label: '已归档' },
 ]
 
 export default function ExpManagePage() {
@@ -31,6 +30,10 @@ export default function ExpManagePage() {
   const [statusFilter, setStatusFilter] = useState('')
 
   const [availableTags, setAvailableTags] = useState<string[]>([])
+
+  // Delete/Reject modal
+  const [deleteTarget, setDeleteTarget] = useState<ExperienceRecord | null>(null)
+  const [deleteMode, setDeleteMode] = useState<'delete' | 'reject'>('delete')
 
   // Edit modal
   const [editModalOpen, setEditModalOpen] = useState(false)
@@ -102,6 +105,7 @@ export default function ExpManagePage() {
     try {
       await deleteExperience(id)
       toast.success('删除成功')
+      setDeleteTarget(null)
       fetchExperiences()
     } catch (err: any) {
       toast.error('删除失败: ' + err.message)
@@ -122,6 +126,7 @@ export default function ExpManagePage() {
     try {
       await rejectExperience(id)
       toast.success('已驳回')
+      setDeleteTarget(null)
       fetchExperiences()
     } catch (err: any) {
       toast.error('驳回失败: ' + err.message)
@@ -219,16 +224,7 @@ export default function ExpManagePage() {
                 size="small"
                 danger
                 icon={<CloseOutlined />}
-                onClick={() => {
-                  Modal.confirm({
-                    title: '确认驳回',
-                    content: '确定要驳回这条经验吗？会直接删除。',
-                    okText: '确认驳回',
-                    cancelText: '取消',
-                    okButtonProps: { danger: true },
-                    onOk: () => handleReject(record.id),
-                  })
-                }}
+                onClick={() => { setDeleteTarget(record); setDeleteMode('reject') }}
               >
                 驳回
               </Button>
@@ -247,16 +243,7 @@ export default function ExpManagePage() {
             size="small"
             danger
             icon={<DeleteOutlined />}
-            onClick={() => {
-              Modal.confirm({
-                title: '确认删除',
-                content: '确定要删除这条经验吗？',
-                okText: '确认删除',
-                cancelText: '取消',
-                okButtonProps: { danger: true },
-                onOk: () => handleDelete(record.id),
-              })
-            }}
+            onClick={() => { setDeleteTarget(record); setDeleteMode('delete') }}
           >
             删除
           </Button>
@@ -328,6 +315,24 @@ export default function ExpManagePage() {
             style={{ fontFamily: 'var(--font-mono)', fontSize: 13, lineHeight: 1.6 }}
           />
         </div>
+      </Modal>
+
+      <Modal
+        title={deleteMode === 'reject' ? '确认驳回' : '确认删除'}
+        open={deleteTarget !== null}
+        onOk={() => deleteMode === 'reject' ? handleReject(deleteTarget!.id) : handleDelete(deleteTarget!.id)}
+        onCancel={() => setDeleteTarget(null)}
+        okText={deleteMode === 'reject' ? '确认驳回' : '确认删除'}
+        cancelText="取消"
+        okButtonProps={{ danger: true }}
+        destroyOnClose
+      >
+        {deleteTarget && (
+          <p>{deleteMode === 'reject'
+            ? '确定要驳回这条经验吗？会直接删除。'
+            : '确定要删除这条经验吗？'}
+          </p>
+        )}
       </Modal>
     </div>
   )

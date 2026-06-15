@@ -197,10 +197,46 @@ async def create_conversation(req: CreateConversationRequest):
     )
 
 
+def _cleanup_chat_uploads(conv_id: str) -> int:
+    """Delete all chat-uploaded files associated with a conversation."""
+    import json as _json
+    from pathlib import Path as _Path
+    from app.config import settings as _settings
+    from app.rag_engine import rag
+
+    upload_dir = _Path(_settings.upload_dir)
+    if not upload_dir.exists():
+        return 0
+
+    deleted = 0
+    for fpath in list(upload_dir.iterdir()):
+        if not fpath.is_file():
+            continue
+        if fpath.suffix == ".meta":
+            # Read meta to check conv_id
+            try:
+                meta = _json.loads(fpath.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if meta.get("conv_id") == conv_id and meta.get("source") == "chat":
+                file_id = fpath.stem
+                # Delete the meta file
+                fpath.unlink()
+                # Delete associated data files
+                for df in upload_dir.iterdir():
+                    if df.is_file() and df.stem.startswith(file_id):
+                        df.unlink()
+                        deleted += 1
+    return deleted
+
+
 @router.delete("/{conversation_id}")
 async def delete_conversation(conversation_id: str):
     ok = persistent_store.delete(conversation_id)
-    return {"status": "ok" if ok else "not_found", "deleted": conversation_id}
+    cleanup_count = _cleanup_chat_uploads(conversation_id)
+    if cleanup_count > 0:
+        logger.info(f"[History:Delete] Cleaned up {cleanup_count} chat upload file(s) for conv={conversation_id}")
+    return {"status": "ok" if ok else "not_found", "deleted": conversation_id, "files_cleaned": cleanup_count}
 
 
 @router.get("/search")

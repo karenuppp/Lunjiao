@@ -95,6 +95,7 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
 
         rag_status = meta.get("rag_status", "indexed")  # default indexed for legacy files without status in meta
         chunk_count = meta.get("chunk_count", 0)
+        rag_error = meta.get("rag_error", "")
         source = meta.get("source", "kb")
 
         rebuilt[file_id] = UploadResponse(
@@ -105,6 +106,7 @@ def _rebuild_index_from_disk() -> dict[str, UploadResponse]:
             category=category,
             uploaded_at=uploaded_at,
             rag_status=rag_status,
+            rag_error=rag_error,
             chunk_count=chunk_count,
             user_id=file_user_id,
             source=source,
@@ -257,6 +259,7 @@ async def _process_single_file(
     allowed_extensions: list[str],
     user_id: str = "default",
     source: str = "kb",
+    conv_id: str = "",
 ) -> UploadResponse:
     ext = _validate_file_type(filename, allowed_extensions)
     file_size = len(content)
@@ -286,6 +289,7 @@ async def _process_single_file(
                 "uploaded_at": timestamp,
                 "user_id": user_id,
                 "source": source,
+                "conv_id": conv_id,
             }))
     except Exception:
         pass
@@ -343,10 +347,6 @@ async def _process_single_file(
                 })
                 continue
 
-            if source == "chat":
-                extracted_files.append({"name": child_name, "status": "skipped"})
-                continue
-
             rag_status, chunk_count, rag_error = await _index_file_local(
                 file_id, child_path, child_name, category, user_id
             )
@@ -363,7 +363,7 @@ async def _process_single_file(
 
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-        rag_status_final = "skipped" if source == "chat" else ("indexed" if any_indexed else "failed")
+        rag_status_final = "indexed" if any_indexed else "failed"
         response = UploadResponse(
             file_id=file_id,
             file_name=filename,
@@ -380,22 +380,6 @@ async def _process_single_file(
 
         _update_meta_rag_status(upload_dir, file_id, response.rag_status, response.chunk_count, response.rag_error)
 
-        return response
-
-    if source == "chat":
-        # Chat-uploaded files: save to disk but skip RAG indexing.
-        # Agent can still read them via find_file_by_name tool.
-        response = UploadResponse(
-            file_id=file_id,
-            file_name=filename,
-            file_size=file_size,
-            file_type=ext.lstrip("."),
-            category=category,
-            uploaded_at=timestamp,
-            rag_status="skipped",
-        )
-        _update_meta_rag_status(upload_dir, file_id, "skipped", 0)
-        logger.info(f"[Upload:Chat] Chat file saved (no RAG): {filename}")
         return response
 
     rag_task = asyncio.create_task(
@@ -436,6 +420,7 @@ async def upload_file(
     category: str = Form(""),
     user_id: str = Form("default"),
     source: str = Form("kb"),
+    conv_id: str = Form(""),
 ):
     if not file.filename:
         raise HTTPException(400, "No file provided")
@@ -448,7 +433,7 @@ async def upload_file(
         ".zip", ".rar", ".7z", ".tar.gz", ".tgz",
     ]
 
-    return await _process_single_file(content, file.filename, category, upload_dir, allowed, user_id, source)
+    return await _process_single_file(content, file.filename, category, upload_dir, allowed, user_id, source, conv_id)
 
 
 @router.post("/batch")
@@ -457,6 +442,7 @@ async def upload_files_batch(
     category: str = Form(""),
     user_id: str = Form("default"),
     source: str = Form("kb"),
+    conv_id: str = Form(""),
 ):
     if not files:
         raise HTTPException(400, "No files provided")
@@ -476,7 +462,7 @@ async def upload_files_batch(
             continue
         try:
             content = await file.read()
-            resp = await _process_single_file(content, file.filename, category, upload_dir, allowed, user_id, source)
+            resp = await _process_single_file(content, file.filename, category, upload_dir, allowed, user_id, source, conv_id)
             results.append(resp)
         except HTTPException as e:
             errors.append({"filename": file.filename, "error": e.detail})

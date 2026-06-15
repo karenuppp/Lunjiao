@@ -1,4 +1,4 @@
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 import json
@@ -9,6 +9,7 @@ from app.agent.graph import run_agent_sync, run_agent_stream_simple
 from app.agent.events import FinalAnswerEvent, DataSourceEvent, ErrorEvent
 from app.database import SessionLocal
 from app.models.user import User
+from app.services.experience_service import extract_and_save
 from app.logger import get_logger
 
 logger = get_logger(__name__)
@@ -178,7 +179,7 @@ class FeedbackRequest(BaseModel):
 
 
 @router.post("/feedback")
-async def submit_feedback(request: FeedbackRequest, background_tasks: BackgroundTasks):
+async def submit_feedback(request: FeedbackRequest):
     user_id = request.user_id or "default"
 
     extracted = False
@@ -222,8 +223,7 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
                         break
 
             if user_question and ai_answer:
-                background_tasks.add_task(
-                    _extract_experiences_bg,
+                count = await extract_and_save(
                     user_question=user_question,
                     ai_answer=ai_answer,
                     user_id=user_id,
@@ -231,8 +231,11 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
                     msg_id=request.message_id,
                     category=template_name,
                 )
-                extracted = True
-                extract_msg = "经验推送成功"
+                if count > 0:
+                    extracted = True
+                    extract_msg = f"成功提取 {count} 条经验"
+                else:
+                    extract_msg = "未提取到可复用的经验，该回答可能信息量不足"
             else:
                 logger.warning(f"[Feedback:Save] Q&A not found for conv={conv_id}, msg={request.message_id}")
                 extract_msg = "未找到对应问答对，请刷新页面后重试"
@@ -243,39 +246,5 @@ async def submit_feedback(request: FeedbackRequest, background_tasks: Background
     return {"ok": True, "rating": request.rating, "extracted": extracted, "extract_msg": extract_msg}
 
 
-def _extract_experiences_bg(
-    user_question: str,
-    ai_answer: str,
-    user_id: str,
-    conv_id: str,
-    msg_id: str,
-    category: str = "",
-):
-    logger.info(f"[Feedback:BG] Task started for user {user_id}")
-    try:
-        import asyncio
-        from app.services.experience_service import extract_and_save
-
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            count = loop.run_until_complete(
-                extract_and_save(
-                    user_question=user_question,
-                    ai_answer=ai_answer,
-                    user_id=user_id,
-                    conv_id=conv_id,
-                    msg_id=msg_id,
-                    category=category,
-                )
-            )
-            # Cancel pending daemon tasks (LightRAG workers) before closing loop
-            pending = asyncio.all_tasks(loop)
-            for task in pending:
-                task.cancel()
-            loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
-            logger.info(f"[Feedback:Extract] Extracted {count} experience(s) for user {user_id}")
-        finally:
-            loop.close()
-    except Exception as e:
-        logger.exception(f"[Feedback:BG] Background extraction failed: {e}")
+# _extract_experiences_bg removed — extraction now happens inline in submit_feedback
+# to ensure accurate feedback to the user

@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { Select, Spin } from 'antd'
 import { User, Sparkles, Loader2, X, FileText, Table2, Presentation, Archive, Image as ImageIcon, FileType, Paperclip } from 'lucide-react'
 import { listPromptTemplates, type PromptTemplate } from '../api/chat'
+import { exportToDocx, exportToXlsx, hasLargeTable } from '../utils/export'
 import './chat.css'
 
 interface Message {
@@ -171,6 +172,32 @@ const MessageItem = memo(function MessageItem({
             </ReactMarkdown>
           )}
         </div>
+
+        {/* Download cards: docx for long text, xlsx for large tables */}
+        {msg.role === 'assistant' && !showLoadingBubble && msg.content && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+            {msg.content.length > 500 && (
+              <div
+                className="download-card"
+                onClick={() => exportToDocx(msg.content)}
+                title="下载为 Word 文档"
+              >
+                <FileType size={16} style={{ color: '#2563EB' }} />
+                <span style={{ fontSize: 12, color: '#2563EB' }}>下载 Word 文档</span>
+              </div>
+            )}
+            {hasLargeTable(msg.content) && (
+              <div
+                className="download-card"
+                onClick={() => exportToXlsx(msg.content)}
+                title="下载为 Excel 表格"
+              >
+                <Table2 size={16} style={{ color: '#16A34A' }} />
+                <span style={{ fontSize: 12, color: '#16A34A' }}>下载 Excel 表格</span>
+              </div>
+            )}
+          </div>
+        )}
 
         {msg.role === 'assistant' && !showLoadingBubble && msg.content && (
           <div className="feedback-row">

@@ -35,6 +35,54 @@ from app.logger import get_logger
 
 logger = get_logger(__name__)
 
+# ── Text-based tool call parser (fallback for models without native function calling) ─
+
+_TEXT_TC_PATTERN = re.compile(
+    r'<tool_call>\s*'
+    r'(?:<function=(\w+)>)?'
+    r'(.*?)'
+    r'(?:</function>)?'
+    r'\s*</tool_call>',
+    re.DOTALL,
+)
+
+_PARAM_PATTERN = re.compile(
+    r'<parameter=(\w+)>\s*(.*?)\s*</parameter>',
+    re.DOTALL,
+)
+
+
+def _parse_text_tool_calls(text: str) -> list[dict]:
+    """Extract tool calls from model text output when native function calling fails.
+
+    Handles the text format some local models produce, e.g.:
+        <tool_call> <function=query_rag> <parameter=query_text>...</parameter>
+        <parameter=top_k>5</parameter> </function> </tool_call>
+
+    Returns list of {"name": str, "arguments": str} dicts.
+    """
+    results: list[dict] = []
+    for tc_match in _TEXT_TC_PATTERN.finditer(text):
+        func_name = tc_match.group(1) or ""
+        body = tc_match.group(2)
+
+        # If no <function=NAME> wrapper, try <function=NAME> inside body
+        if not func_name:
+            func_match = re.search(r'<function=(\w+)>', body)
+            if func_match:
+                func_name = func_match.group(1)
+
+        params: dict[str, str] = {}
+        for pm in _PARAM_PATTERN.finditer(body):
+            params[pm.group(1)] = pm.group(2).strip()
+
+        if func_name:
+            results.append({
+                "name": func_name,
+                "arguments": json.dumps(params, ensure_ascii=False),
+            })
+    return results
+
 
 # ── Experience suggestion heuristics ────────────────────────────────────────
 
@@ -201,6 +249,8 @@ def _tool_label(
     elif func_name == "use_skill":
         skill_name = args.get("skill_name", "")
         return f"正在调用{skill_name}技能..." if skill_name else "正在调用技能..."
+    elif func_name == "run_code":
+        return "正在执行代码..."
     return func_name
 
 
@@ -212,6 +262,8 @@ def _data_source_for_tool(func_name: str) -> str | None:
         return "查询数据库"
     elif func_name == "find_file_by_name":
         return "查找文件"
+    elif func_name == "run_code":
+        return "执行代码"
     return None
 
 
@@ -284,7 +336,33 @@ class ReActAgent:
             msg = response.choices[0].message
 
             if not msg.tool_calls:
-                return msg.content or "", list(data_sources)
+                # Fallback: parse text-based tool calls from model output
+                content = msg.content or ""
+                text_tcs = _parse_text_tool_calls(content)
+                if text_tcs:
+                    logger.info(
+                        f"[Agent:Sync] Parsed {len(text_tcs)} "
+                        f"text-based tool call(s): {[t['name'] for t in text_tcs]}"
+                    )
+                    # Convert to pseudo-tool_calls so the loop below handles them
+                    pseudo_calls = []
+                    for i, tc in enumerate(text_tcs):
+                        pseudo_calls.append(
+                            type("PseudoToolCall", (), {
+                                "id": f"text-tc-sync-{i}",
+                                "type": "function",
+                                "function": type("PseudoFunc", (), {
+                                    "name": tc["name"],
+                                    "arguments": tc["arguments"],
+                                }),
+                            })()
+                        )
+                    msg = type("PseudoMsg", (), {
+                        "content": _TEXT_TC_PATTERN.sub("", content).strip(),
+                        "tool_calls": pseudo_calls,
+                    })()
+                else:
+                    return content, list(data_sources)
 
             for tc in msg.tool_calls:
                 func_name = tc.function.name
@@ -404,8 +482,26 @@ class ReActAgent:
                                     existing["args"] += tc_delta.function.arguments
 
                 if not tool_calls_buf:
-                    final_answer = collected_content
-                    break
+                    # Fallback: some local models output text-based tool calls
+                    # instead of native function calling. Parse them so tools
+                    # still execute correctly.
+                    text_tcs = _parse_text_tool_calls(collected_content)
+                    if text_tcs:
+                        logger.info(
+                            f"[Agent:Round{round_idx}] Parsed {len(text_tcs)} "
+                            f"text-based tool call(s): {[t['name'] for t in text_tcs]}"
+                        )
+                        for i, tc in enumerate(text_tcs):
+                            tool_calls_buf[str(i)] = {
+                                "id": f"text-tc-{round_idx}-{i}",
+                                "name": tc["name"],
+                                "args": tc["arguments"],
+                            }
+                        # Strip the raw XML block so it doesn't pollute the answer
+                        collected_content = _TEXT_TC_PATTERN.sub("", collected_content).strip()
+                    else:
+                        final_answer = collected_content
+                        break
 
                 for idx in sorted(tool_calls_buf.keys()):
                     tc = tool_calls_buf[idx]

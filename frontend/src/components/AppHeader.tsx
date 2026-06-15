@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Button, Modal, Input } from 'antd'
+import { Button, Modal, Input, Tag } from 'antd'
 import {
   MenuUnfoldOutlined,
   MenuFoldOutlined,
@@ -11,7 +11,7 @@ import {
 } from '@ant-design/icons'
 import { useChat } from '../store/chatStore'
 import { useTour } from '../store/tourStore'
-import { submitOpinion } from '../api/chat'
+import { submitOpinion, checkSandboxStatus } from '../api/chat'
 import { useToast } from './Toast'
 
 interface AppHeaderProps {
@@ -35,6 +35,22 @@ export default function AppHeader({
   const [feedbackContent, setFeedbackContent] = useState('')
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
   const [changelogOpen, setChangelogOpen] = useState(false)
+  const [sandboxReady, setSandboxReady] = useState(false)
+
+  const pollSandbox = useCallback(async () => {
+    try {
+      const { available } = await checkSandboxStatus()
+      setSandboxReady(available)
+    } catch {
+      setSandboxReady(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    pollSandbox()
+    const timer = setInterval(pollSandbox, 30000)
+    return () => clearInterval(timer)
+  }, [pollSandbox])
 
   const handleLogout = () => {
     chat.logout()
@@ -153,6 +169,13 @@ export default function AppHeader({
       </span>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <Tag
+          color={sandboxReady ? 'green' : 'red'}
+          style={{ margin: 0, cursor: 'default' }}
+          title={sandboxReady ? 'Docker 沙箱可用，技能可执行代码' : 'Docker 沙箱不可用，技能无法执行代码'}
+        >
+          {sandboxReady ? '技能已装备' : '技能未预备'}
+        </Tag>
         <div
           className="help-btn-box"
           onClick={() => setChangelogOpen(true)}

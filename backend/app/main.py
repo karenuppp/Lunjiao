@@ -84,6 +84,14 @@ async def health():
     return {"status": "ok", "version": "0.1.0"}
 
 
+@app.get("/api/sandbox/status")
+async def sandbox_status():
+    """Check whether the Docker sandbox is available for code execution."""
+    from app.sandbox import is_available
+    available = is_available()
+    return {"available": available}
+
+
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
 app.include_router(data_sources.router, prefix="/api/data-sources", tags=["data-sources"])
 app.include_router(history.router, prefix="/api/history", tags=["history"])

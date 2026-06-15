@@ -58,6 +58,17 @@ class Settings:
         ".pdf,.docx,.doc,.xlsx,.xls,.pptx,.csv,.txt,.md,.png,.jpg,.jpeg,.zip,.rar,.7z,.tar.gz,.tgz",
     ).split(",")
 
+    # ── Sandbox (Docker code execution) ──
+    sandbox_enabled: bool = os.getenv("SANDBOX_ENABLED", "true").lower() in ("1", "true", "yes")
+    sandbox_image: str = os.getenv("SANDBOX_IMAGE", "zhiwei-sandbox:latest")
+    sandbox_timeout: int = int(os.getenv("SANDBOX_TIMEOUT", "60"))
+    sandbox_max_timeout: int = int(os.getenv("SANDBOX_MAX_TIMEOUT", "120"))
+    sandbox_memory_limit: str = os.getenv("SANDBOX_MEMORY_LIMIT", "256m")
+    sandbox_cpu_quota: int = int(os.getenv("SANDBOX_CPU_QUOTA", "50000"))
+    sandbox_cpu_period: int = int(os.getenv("SANDBOX_CPU_PERIOD", "100000"))
+    sandbox_max_output_bytes: int = int(os.getenv("SANDBOX_MAX_OUTPUT_BYTES", "102400"))
+    sandbox_tmpfs_size_mb: int = int(os.getenv("SANDBOX_TMPFS_SIZE_MB", "64"))
+
     @property
     def is_configured(self) -> bool:
         return bool(self.openai_base_url)
