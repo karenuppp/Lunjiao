@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Button, Modal, Input, Tag } from 'antd'
+import { Button, Modal, Input, Tag, Popover } from 'antd'
 import {
   MenuUnfoldOutlined,
   MenuFoldOutlined,
@@ -11,7 +11,7 @@ import {
 } from '@ant-design/icons'
 import { useChat } from '../store/chatStore'
 import { useTour } from '../store/tourStore'
-import { submitOpinion, checkSandboxStatus } from '../api/chat'
+import { submitOpinion, checkSandboxStatus, listSkills, type SkillRecord } from '../api/chat'
 import { useToast } from './Toast'
 
 interface AppHeaderProps {
@@ -36,6 +36,14 @@ export default function AppHeader({
   const [feedbackSubmitting, setFeedbackSubmitting] = useState(false)
   const [changelogOpen, setChangelogOpen] = useState(false)
   const [sandboxReady, setSandboxReady] = useState(false)
+  const [skills, setSkills] = useState<SkillRecord[]>([])
+  const [skillsError, setSkillsError] = useState(false)
+
+  useEffect(() => {
+    listSkills()
+      .then(setSkills)
+      .catch(() => setSkillsError(true))
+  }, [])
 
   const pollSandbox = useCallback(async () => {
     try {
@@ -80,6 +88,26 @@ export default function AppHeader({
       setFeedbackSubmitting(false)
     }
   }
+
+  const skillPopoverContent = (
+    <div className="skill-popover-content">
+      {skillsError ? (
+        <p className="skill-empty">加载失败</p>
+      ) : skills.length === 0 ? (
+        <p className="skill-empty">暂无已装备技能</p>
+      ) : (
+        skills.map(s => (
+          <div key={s.id} className="skill-item">
+            <div className="skill-title">🔑 {s.title}</div>
+            <div className="skill-desc">{s.description}</div>
+          </div>
+        ))
+      )}
+      <div className="skill-hint">
+        💡 在提问中使用对应关键词即可触发技能，如"整理成公文格式"
+      </div>
+    </div>
+  )
 
   return (
     <div className="top-bar">
@@ -169,13 +197,16 @@ export default function AppHeader({
       </span>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Tag
-          color={sandboxReady ? 'green' : 'red'}
-          style={{ margin: 0, cursor: 'default' }}
-          title={sandboxReady ? 'Docker 沙箱可用，技能可执行代码' : 'Docker 沙箱不可用，技能无法执行代码'}
-        >
-          {sandboxReady ? '技能已装备' : '技能未预备'}
-        </Tag>
+        <Popover content={skillPopoverContent} title="已装备技能" trigger="hover">
+          <span style={{ display: 'inline-flex', alignItems: 'center', padding: '4px 0', cursor: 'pointer' }}>
+            <Tag
+              color={sandboxReady ? 'green' : 'red'}
+              style={{ margin: 0 }}
+            >
+              {sandboxReady ? '技能已装备' : '技能未预备'}
+            </Tag>
+          </span>
+        </Popover>
         <div
           className="help-btn-box"
           onClick={() => setChangelogOpen(true)}

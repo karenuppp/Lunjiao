@@ -177,6 +177,15 @@ html, body {
   border-color: #4F46E5; background: #EEF2FF; color: #4F46E5;
 }
 
+/* ── Skill-equipped Popover ── */
+.skill-popover-content { max-width: 320px; }
+.skill-item { padding: 8px 0; border-bottom: 1px solid #F3F4F6; }
+.skill-item:last-child { border-bottom: none; }
+.skill-title { font-weight: 600; color: #1F2937; font-size: 13px; margin-bottom: 2px; }
+.skill-desc { color: #6B7280; font-size: 12px; line-height: 1.5; }
+.skill-empty { color: #9CA3AF; font-size: 13px; text-align: center; padding: 12px 0; margin: 0; }
+.skill-hint { margin-top: 10px; padding-top: 8px; border-top: 1px solid #E5E7EB; color: #9CA3AF; font-size: 12px; line-height: 1.6; }
+
 
 .chat-area {
   flex: 1; display: flex; flex-direction: column; overflow: hidden;
@@ -502,31 +511,6 @@ html, body {
 .progress-desc { font-size: 11px; color: #9CA3AF; margin-top: 2px; }
 .progress-error { font-size: 11px; color: var(--status-error); margin-top: 2px; }
 
-.kb-archive-children {
-  margin-top: 6px;
-  margin-left: 26px;
-  padding-left: 10px;
-  border-left: 2px solid #E5E7EB;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.kb-child-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
-  border-radius: 4px;
-  background: #F3F4F6;
-  font-size: 12px;
-}
-.kb-child-item .progress-name {
-  font-size: 12px;
-}
-.kb-child-item .progress-error {
-  font-size: 10px;
-}
-
 .empty-state {
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 32px 16px; color: #9CA3AF;
@@ -689,6 +673,130 @@ html, body {
 @keyframes slideDown {
   from { opacity: 0; transform: translateY(-20px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* ── Context Menu ── */
+.context-menu {
+  position: fixed;
+  z-index: 1100;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  padding: 4px;
+  min-width: 120px;
+  animation: fadeIn 0.1s ease-out;
+}
+
+.context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  background: transparent;
+  font-size: 13px;
+  color: #374151;
+  text-align: left;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+.context-menu-item:hover {
+  background: #F3F4F6;
+}
+.context-menu-item--danger {
+  color: #EF4444;
+}
+.context-menu-item--danger:hover {
+  background: #FEF2F2;
+}
+
+.context-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(15, 23, 42, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.12s ease-out;
+}
+
+.context-menu-dialog {
+  background: #FFFFFF;
+  border-radius: 12px;
+  padding: 24px;
+  width: 380px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.16);
+  animation: slideDown 0.15s ease-out;
+}
+
+.context-menu-dialog-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0F172A;
+  margin-bottom: 16px;
+}
+
+.context-menu-dialog-body {
+  font-size: 14px;
+  color: #475569;
+  margin: 0 0 20px;
+  line-height: 1.6;
+}
+
+.context-menu-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #E2E8F0;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+}
+.context-menu-input:focus {
+  border-color: #4F46E5;
+  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.1);
+}
+
+.context-menu-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+}
+
+.context-menu-btn {
+  padding: 8px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.context-menu-btn--cancel {
+  background: #F3F4F6;
+  color: #374151;
+}
+.context-menu-btn--cancel:hover {
+  background: #E5E7EB;
+}
+.context-menu-btn--confirm {
+  background: #4F46E5;
+  color: #FFFFFF;
+}
+.context-menu-btn--confirm:hover {
+  background: #4338CA;
+}
+.context-menu-btn--danger {
+  background: #EF4444;
+  color: #FFFFFF;
+}
+.context-menu-btn--danger:hover {
+  background: #DC2626;
 }
 
 @media (prefers-reduced-motion: reduce) {
