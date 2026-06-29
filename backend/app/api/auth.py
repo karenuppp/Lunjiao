@@ -30,7 +30,7 @@ class UserItem(BaseModel):
     id: int
     account: str
     role: str
-    kb_scope: str = "personal"
+    kb_scope: str = "none"
     db_scope: list[int] | None = None
     exp_extract_enabled: bool = False
 
@@ -42,7 +42,7 @@ class ChangePasswordRequest(BaseModel):
 
 
 class SetQueryPermissionRequest(BaseModel):
-    kb_scope: str  # "public" | "personal" | "none"
+    kb_scope: str  # "public" | "none"
     db_scope: list[int] | None = None  # list of connection IDs
     exp_extract_enabled: bool | None = None  # allow this user's 👍 to trigger extraction
 
@@ -102,7 +102,7 @@ def list_users(user_id: str, db: Session = Depends(get_db)):
             id=u.id,
             account=u.account,
             role=u.role,
-            kb_scope=u.kb_scope or "personal",
+            kb_scope=u.kb_scope or "none",
             db_scope=_parse_db_scope(u.db_scope),
             exp_extract_enabled=bool(u.exp_extract_enabled),
         )
@@ -164,7 +164,7 @@ def get_query_permission(user_id: int, caller_id: str, db: Session = Depends(get
         raise HTTPException(status_code=404, detail="用户不存在")
 
     return QueryPermissionResponse(
-        kb_scope=user.kb_scope or "personal",
+        kb_scope=user.kb_scope or "none",
         db_scope=_parse_db_scope(user.db_scope),
         exp_extract_enabled=bool(user.exp_extract_enabled),
     )
@@ -174,8 +174,8 @@ def get_query_permission(user_id: int, caller_id: str, db: Session = Depends(get
 def set_query_permission(user_id: int, caller_id: str, req: SetQueryPermissionRequest, db: Session = Depends(get_db)):
     _require_admin(db, caller_id)
 
-    if req.kb_scope not in ("public", "personal", "none"):
-        raise HTTPException(status_code=400, detail="kb_scope 只能是 public、personal 或 none")
+    if req.kb_scope not in ("public", "none"):
+        raise HTTPException(status_code=400, detail="kb_scope 只能是 public 或 none")
 
     user = db.query(User).filter(User.id == user_id).first()
     if not user:

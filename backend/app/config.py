@@ -55,8 +55,10 @@ class Settings:
     rag_fast_indexing: bool = os.getenv("RAG_FAST_INDEXING", "true").lower() in ("1", "true", "yes")
     allowed_extensions: list[str] = os.getenv(
         "ALLOWED_EXTENSIONS",
-        ".pdf,.docx,.doc,.xlsx,.xls,.pptx,.csv,.txt,.md,.png,.jpg,.jpeg,.zip,.rar,.7z,.tar.gz,.tgz",
+        ".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt,.md",
     ).split(",")
+
+    download_dir: str = os.getenv("DOWNLOAD_DIR", str(Path(__file__).parent.parent / "downloads"))
 
     # ── Sandbox (Docker code execution) ──
     sandbox_enabled: bool = os.getenv("SANDBOX_ENABLED", "true").lower() in ("1", "true", "yes")

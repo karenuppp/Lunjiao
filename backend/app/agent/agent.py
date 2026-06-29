@@ -25,6 +25,7 @@ from app.agent.events import (
     FinalAnswerEvent,
     ErrorEvent,
     ExperienceSuggestEvent,
+    SkillInvokedEvent,
 )
 from app.agent.tools import get_schemas, execute_tool, TOOL_FUNCTIONS
 from app.config import settings
@@ -173,6 +174,25 @@ def _load_system_prompt() -> str:
 SYSTEM_PROMPT = _load_system_prompt()
 
 
+def _build_skills_prompt() -> str:
+    """Build a prompt section listing available skills for the agent."""
+    from app.database import SessionLocal
+    from app.models.skill import Skill
+    db = SessionLocal()
+    try:
+        skills = db.query(Skill).all()
+        if not skills:
+            return ""
+        lines = ["## 可用技能列表", ""]
+        for s in skills:
+            lines.append(f"- **{s.title}**：{s.description or '（无描述）'}")
+        lines.append("")
+        lines.append("**重要**：当用户问题匹配上述任一技能时，必须第一时间调用 `use_skill` 加载该技能的工作流程，严格按技能指引执行。不要自行判断或跳过技能调用。")
+        return "\n".join(lines)
+    finally:
+        db.close()
+
+
 def lookup_connection_name(conn_id: int) -> str:
     if not conn_id:
         return ""
@@ -190,22 +210,15 @@ async def build_messages(
     user_id: str = "default",
     system_prompt: str = "",
 ) -> list[ChatCompletionMessageParam]:
-    experience_context = ""
-    try:
-        from app.services.experience_service import search_relevant
-        relevant = await search_relevant(question, user_id=user_id)
-        if relevant:
-            parts = ["\n\n## 历史相关经验（来自过往对话）\n"]
-            for i, r in enumerate(relevant, 1):
-                text = r.get("text", "")
-                if text:
-                    parts.append(f"- {text[:300]}")
-            experience_context = "\n".join(parts)
-    except Exception as e:
-        logger.warning(f"[Agent:Run] Experience retrieval skipped: {e}")
-
+    # Experience context is provided by the agent's query_experience tool
+    # at runtime — not injected into the system prompt here (avoids double
+    # vector search with the same query).
     system_content = (system_prompt + "\n\n" + SYSTEM_PROMPT).strip() if system_prompt else SYSTEM_PROMPT
-    system_content += experience_context
+
+    # Inject available skills so the agent knows what to match against
+    skills_text = _build_skills_prompt()
+    if skills_text:
+        system_content = system_content + "\n\n" + skills_text
 
     messages: list[ChatCompletionMessageParam] = [
         {"role": "system", "content": system_content}
@@ -223,7 +236,7 @@ async def build_messages(
 def _tool_label(
     func_name: str,
     args: dict,
-    kb_scope: str = "personal",
+    kb_scope: str = "none",
 ) -> str:
     """Human-readable label for a tool call (shown in UI during execution)."""
     if func_name == "query_rag":
@@ -249,6 +262,12 @@ def _tool_label(
     elif func_name == "use_skill":
         skill_name = args.get("skill_name", "")
         return f"正在调用{skill_name}技能..." if skill_name else "正在调用技能..."
+    elif func_name == "get_skill_reference":
+        skill_name = args.get("skill_name", "")
+        return f"正在查阅{skill_name}参考文档..." if skill_name else "正在查阅参考文档..."
+    elif func_name == "run_skill_script":
+        script_name = args.get("script_name", "")
+        return f"正在执行{script_name}脚本..." if script_name else "正在执行脚本..."
     elif func_name == "run_code":
         return "正在执行代码..."
     return func_name
@@ -262,6 +281,10 @@ def _data_source_for_tool(func_name: str) -> str | None:
         return "查询数据库"
     elif func_name == "find_file_by_name":
         return "查找文件"
+    elif func_name == "use_skill":
+        return "调用技能"
+    elif func_name == "run_skill_script":
+        return "执行脚本"
     elif func_name == "run_code":
         return "执行代码"
     return None
@@ -306,7 +329,7 @@ class ReActAgent:
         self,
         messages: list[ChatCompletionMessageParam],
         user_id: str = "default",
-        kb_scope: str = "personal",
+        kb_scope: str = "none",
         db_scope: list[int] | None = None,
         default_category: str = "",
     ) -> tuple[str, list[str]]:
@@ -410,7 +433,7 @@ class ReActAgent:
         question: str,
         history: list[dict] | None = None,
         user_id: str = "default",
-        kb_scope: str = "personal",
+        kb_scope: str = "none",
         db_scope: list[int] | None = None,
         default_category: str = "",
         conv_id: str = "",
@@ -433,6 +456,7 @@ class ReActAgent:
             messages = await build_messages(question, history, user_id=user_id, system_prompt=system_prompt)
             tool_schemas = get_schemas()
             data_sources_detected: list[str] = []
+            skills_used: list[str] = []
             final_answer = ""
             tool_call_count = 0
 
@@ -449,19 +473,43 @@ class ReActAgent:
 
                 collected_content = ""
                 tool_calls_buf: dict[str, dict] = {}
+                suppress_stream = False
 
                 async for chunk in stream:
                     delta = chunk.choices[0].delta if chunk.choices else None
                     if not delta:
                         continue
 
-                    if delta.content:
-                        collected_content += delta.content
-                        if self.config.react.stream_tokens:
+                    if delta.content and not suppress_stream:
+                        # Check whether this delta + what we've already
+                        # collected crosses into a <tool_call> block.
+                        # If so, suppress from this point onward so the
+                        # raw markup is never streamed to the user.
+                        test = collected_content + delta.content
+                        tc_pos = test.find("<tool_call")
+                        if tc_pos >= 0:
+                            suppress_stream = True
+                            # Stream any safe prefix that arrived before
+                            # the <tool_call> marker.
+                            safe_prefix = test[:tc_pos]
+                            already_seen = len(collected_content)
+                            if safe_prefix and len(safe_prefix) > already_seen:
+                                yield TextDeltaEvent(
+                                    round_idx=round_idx,
+                                    delta=safe_prefix[already_seen:],
+                                )
+                        elif self.config.react.stream_tokens:
                             yield TextDeltaEvent(
                                 round_idx=round_idx,
                                 delta=delta.content,
                             )
+                    elif delta.content and self.config.react.stream_tokens:
+                        # Still streaming safe content; suppress_stream is
+                        # True so we skip tool-call markup.
+                        pass
+
+                    if delta.content:
+                        collected_content += delta.content
 
                     if delta.tool_calls:
                         for tc_delta in delta.tool_calls:
@@ -531,11 +579,32 @@ class ReActAgent:
                         default_category=default_category, **args,
                     )
 
+                    # Detect skill download results
+                    skill_download_id = ""
+                    skill_filename = ""
+                    if func_name == "run_skill_script":
+                        try:
+                            parsed = json.loads(result)
+                            if isinstance(parsed, dict) and parsed.get("ok") and parsed.get("download_id"):
+                                skill_download_id = parsed["download_id"]
+                                skill_filename = parsed.get("filename", "")
+                        except (json.JSONDecodeError, TypeError):
+                            pass
+                    elif func_name == "use_skill":
+                        skills_used.append(args.get("skill_name", ""))
+
                     yield ToolCallEndEvent(
                         round_idx=round_idx,
                         tool_name=func_name,
                         result_preview=result[:200],
                     )
+
+                    if skill_download_id:
+                        yield SkillInvokedEvent(
+                            skill_name=args.get("skill_name", ""),
+                            download_id=skill_download_id,
+                            filename=skill_filename,
+                        )
 
                     messages.append({
                         "role": "assistant",
@@ -587,7 +656,11 @@ class ReActAgent:
                 yield FinalAnswerEvent(text=final_answer, message_id=msg_id)
             else:
                 yield FinalAnswerEvent(
-                    text="(Agent produced no text response)",
+                    text="抱歉，我未能检索到相关信息来回答您的问题。建议您：\n"
+                         "1. 尝试更换关键词或更具体的问法\n"
+                         "2. 确认知识库中已上传相关文档\n"
+                         "3. 联系管理员检查知识库索引状态\n"
+                         "4. 如果这是通用知识类问题，可尝试重新提问（系统将优先使用模型自身知识回答）",
                     message_id=msg_id,
                 )
 

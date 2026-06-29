@@ -48,6 +48,7 @@ opinions/
 
 # Runtime conversation data
 talk/
+downloads/
 
 # Tarballs
 *.tar

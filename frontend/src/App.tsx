@@ -87,6 +87,7 @@ function ChatLayout() {
             onNewConversation={chat.newConversation}
             onSwitchConversation={chat.switchConversation}
             onRemoveConversation={chat.removeConversation}
+            onRenameConversation={chat.renameConversation}
             onSearchClick={() => setSearchOpen(true)}
           />
         </Sider>
@@ -109,6 +110,7 @@ function ChatLayout() {
               currentTool={chat.currentTool ?? null}
               highlightMessageId={highlightMsgId}
               onSendChat={(msg, _files, cat, visibleMsg, sysPrompt) => chat.sendChat(msg, cat, visibleMsg, cat, sysPrompt)}
+              onStop={() => chat.abortChat()}
               onFeedback={(msgId, rating) => chat.sendFeedback(msgId, rating)}
               onSaveExperienceSuggestion={(msgId) => chat.saveExperienceSuggestion(msgId)}
               onDismissExperienceSuggestion={(msgId) => chat.dismissExperienceSuggestion(msgId)}

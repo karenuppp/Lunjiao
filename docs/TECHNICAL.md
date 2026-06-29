@@ -479,7 +479,7 @@ error             → FINALIZE_STREAMING（显示错误信息）
 | `query_db` | 执行只读 SQL | 有 db_scope 的用户 |
 | `list_db_tables` | 列出数据库表结构 | 有 db_scope 的用户 |
 | `list_db_connections` | 列出可用数据库 | 有 db_scope 的用户 |
-| `query_experience` | 搜索历史经验 | 所有用户（用户隔离） |
+| `query_experience` | 搜索历史经验 | 所有用户（公共经验库，全体共享） |
 | `find_file_by_name` | 按文件名查找并读取内容 | 所有用户（用户隔离） |
 | `use_skill` | 加载技能规范 | 所有用户 |
 
@@ -746,7 +746,8 @@ ChatProvider (Context + useReducer)
 
 - `query_rag` → 注入 `user_id` + `kb_scope`
 - `list_db_connections` / `list_db_tables` / `query_db` → 注入 `db_scope`
-- `query_experience` / `find_file_by_name` → 注入 `user_id`
+- `query_experience` → 注入 `user_id`（仅用于记录提取者，检索时经验库全体共享）
+- `find_file_by_name` → 注入 `user_id`
 
 管理员在"用户管理"页面为每个用户单独配置权限。
 

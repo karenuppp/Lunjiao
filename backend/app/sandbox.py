@@ -36,6 +36,10 @@ def _get_client():
         _docker_available = True
         logger.info("[Sandbox] Docker client initialized")
         return _docker_client
+    except ImportError:
+        _docker_available = False
+        logger.debug("[Sandbox] Docker SDK not installed, sandbox disabled")
+        return None
     except DockerException as e:
         _docker_available = False
         logger.warning(f"[Sandbox] Docker unavailable: {e}")
@@ -53,8 +57,20 @@ def is_available() -> bool:
     return _get_client() is not None
 
 
-async def run_code(code: str, timeout: int | None = None) -> str:
-    """Execute Python code in a sandboxed Docker container."""
+async def run_code(
+    code: str,
+    timeout: int | None = None,
+    extra_files: dict[str, str] | None = None,
+    output_dir: str | None = None,
+) -> str:
+    """Execute Python code in a sandboxed Docker container.
+
+    Args:
+        code: Python source code to execute.
+        timeout: Max execution time in seconds.
+        extra_files: Dict mapping container-path → file-content to mount.
+        output_dir: Host directory mounted writable at /sandbox/output.
+    """
     if not settings.sandbox_enabled:
         return "[Sandbox Disabled] Code execution is disabled on this server."
 
@@ -90,16 +106,44 @@ async def run_code(code: str, timeout: int | None = None) -> str:
         with open(code_file, "w", encoding="utf-8") as f:
             f.write(code)
 
+        # Build volumes dict
+        volumes: dict[str, dict] = {
+            code_file: {
+                "bind": "/sandbox/user_code.py",
+                "mode": "ro",
+            },
+        }
+
+        # Mount extra files (e.g. input data for the script)
+        if extra_files:
+            for container_path, file_content in extra_files.items():
+                # Sanitize: only allow paths under /sandbox/
+                safe_path = os.path.normpath(container_path)
+                if not safe_path.startswith("/sandbox/"):
+                    logger.warning(f"[Sandbox:{run_id}] Rejected extra file path: {container_path}")
+                    continue
+                host_file = os.path.join(tmp_dir, os.path.basename(safe_path))
+                with open(host_file, "w", encoding="utf-8") as f:
+                    f.write(file_content)
+                volumes[host_file] = {
+                    "bind": safe_path,
+                    "mode": "ro",
+                }
+
+        # Mount output directory if provided
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+            os.chmod(output_dir, 0o777)
+            volumes[output_dir] = {
+                "bind": "/sandbox/output",
+                "mode": "rw",
+            }
+
         def _run_container() -> str:
             output = client.containers.run(
                 image=settings.sandbox_image,
                 command=[],  # uses ENTRYPOINT from Dockerfile
-                volumes={
-                    code_file: {
-                        "bind": "/sandbox/user_code.py",
-                        "mode": "ro",
-                    },
-                },
+                volumes=volumes,
                 network_mode="none",       # No network access
                 mem_limit=settings.sandbox_memory_limit,
                 cpu_quota=settings.sandbox_cpu_quota,

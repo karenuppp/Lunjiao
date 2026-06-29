@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { DataCategory, PendingFile, UploadProgressItem, AppView, UserInfo, Message as ChatMessage } from '../types/chat'
-import { sendChatStream, isArchiveFile, uploadFilesBatchWithUser, loginUser, sendFeedback, listConversations, loadMessages, deleteConversation, saveSuggestedExperience, dismissExperienceSuggestion } from '../api/chat'
+import { sendChatStream, isAllowedFormat, getAllowedFormatList, uploadFilesBatchWithUser, loginUser, sendFeedback, listConversations, loadMessages, deleteConversation, renameConversation, saveSuggestedExperience, dismissExperienceSuggestion } from '../api/chat'
 import { useToast } from '../components/Toast'
 
 const STORAGE_KEY = 'zhiwei_conversations'
@@ -101,7 +101,7 @@ type ChatAction =
   | { type: 'SWITCH_CONVERSATION'; payload: { id: string | null } }
   | { type: 'ADD_MESSAGE'; payload: { conversationId: string; message: ChatMessage } }
   | { type: 'APPEND_STREAMING'; payload: { conversationId: string; text: string } }
-  | { type: 'FINALIZE_STREAMING'; payload: { conversationId: string; finalText: string; dataSources?: string[] } }
+  | { type: 'FINALIZE_STREAMING'; payload: { conversationId: string; finalText: string; dataSources?: string[]; skillsUsed?: string[]; skillDownloads?: Record<string, string>; completedAt?: string } }
   | { type: 'SET_LOADING'; payload: string | null }
   | { type: 'SET_CURRENT_TOOL'; payload: string | null }
   | { type: 'SET_CATEGORY'; payload: DataCategory[] }
@@ -176,7 +176,7 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
     }
 
     case 'FINALIZE_STREAMING': {
-      const { conversationId, finalText, dataSources } = action.payload
+      const { conversationId, finalText, dataSources, skillsUsed, skillDownloads, completedAt } = action.payload
       return {
         ...state,
         loadingConversationIds: state.loadingConversationIds.filter(id => id !== conversationId),
@@ -189,14 +189,20 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
             msgs[msgs.length - 1] = {
               ...lastMsg,
               content: finalText || lastMsg.content,
+              created_at: completedAt || lastMsg.created_at,
               data_sources_used: dataSources,
+              skills_used: skillsUsed,
+              skill_downloads: skillDownloads,
             }
           } else {
             msgs.push({
               id: `msg-${Date.now()}`,
               role: 'assistant',
               content: finalText || '',
+              created_at: completedAt || new Date().toISOString(),
               data_sources_used: dataSources,
+              skills_used: skillsUsed,
+              skill_downloads: skillDownloads,
             })
           }
           return { ...conv, messages: msgs }
@@ -351,9 +357,11 @@ interface ChatContextValue {
   state: ChatState
   dispatch: React.Dispatch<ChatAction>
   sendChat: (message: string, category?: string, visibleMessage?: string, templateName?: string, systemPrompt?: string) => void
+  abortChat: () => void
   newConversation: () => void
   switchConversation: (id: string | null) => void
   removeConversation: (id: string) => void
+  renameConversation: (id: string, title: string) => void
   setCategory: (cat: DataCategory[]) => void
   uploadFile: (file: File) => Promise<UploadedFileMeta | null>
   removeUploadedFile: (fileId: string) => void
@@ -447,6 +455,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const renameConversationAction = useCallback(async (id: string, title: string) => {
+    dispatch({ type: 'RENAME_CONVERSATION', payload: { id, title } })
+    try {
+      await renameConversation(id, title)
+    } catch (err) {
+      console.error('Failed to rename conversation on server:', err)
+    }
+  }, [])
+
   const setCategory = useCallback((cat: DataCategory[]) => {
     dispatch({ type: 'SET_CATEGORY', payload: cat })
   }, [])
@@ -471,10 +488,12 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
       // Show only visible message in UI (template hidden)
       const displayContent = visibleMessage || message
+      const now = new Date().toISOString()
       const userMsg: ChatMessage = {
         id: `msg-${Date.now()}-user`,
         role: 'user',
         content: displayContent,
+        created_at: now,
         template_name: templateName || undefined,
       }
       dispatch({ type: 'ADD_MESSAGE', payload: { conversationId: convId, message: userMsg } })
@@ -483,13 +502,15 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         type: 'ADD_MESSAGE',
         payload: {
           conversationId: convId,
-          message: { id: `msg-${Date.now()}-ai`, role: 'assistant', content: '', template_name: templateName || undefined },
+          message: { id: `msg-${Date.now()}-ai`, role: 'assistant', content: '', created_at: now, template_name: templateName || undefined },
         },
       })
 
       dispatch({ type: 'SET_LOADING', payload: convId })
 
       const dataSources: string[] = []
+      const skillsUsed: string[] = []
+      const skillDownloads: Record<string, string> = {}
 
       const controller = sendChatStream(
         {
@@ -526,6 +547,14 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               dispatch({ type: 'SET_CURRENT_TOOL', payload: null })
               break
 
+            case 'skill_invoked': {
+              const sn = (data.skill_name as string) || ''
+              const did = (data.download_id as string) || ''
+              if (sn && !skillsUsed.includes(sn)) skillsUsed.push(sn)
+              if (sn && did) skillDownloads[sn] = did
+              break
+            }
+
             case 'data_source': {
               const sources = (data.sources as string[]) || []
               sources.forEach((s: string) => {
@@ -543,6 +572,9 @@ export function ChatProvider({ children }: { children: ReactNode }) {
                   conversationId: convId!,
                   finalText: text,
                   dataSources: dataSources.length > 0 ? dataSources : undefined,
+                  skillsUsed: skillsUsed.length > 0 ? skillsUsed : undefined,
+                  skillDownloads: Object.keys(skillDownloads).length > 0 ? skillDownloads : undefined,
+                  completedAt: new Date().toISOString(),
                 },
               })
               abortMapRef.current.delete(convId!)
@@ -580,7 +612,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
             case 'error':
               console.error('Stream error:', data.message)
-              dispatch({ type: 'FINALIZE_STREAMING', payload: { conversationId: convId!, finalText: `抱歉，处理出错了: ${data.message || '未知错误'}` } })
+              dispatch({ type: 'FINALIZE_STREAMING', payload: { conversationId: convId!, finalText: `抱歉，处理出错了: ${data.message || '未知错误'}`, completedAt: new Date().toISOString() } })
               abortMapRef.current.delete(convId!)
               break
           }
@@ -591,6 +623,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     },
     [state.loadingConversationIds, state.activeConversationId]
   )
+
+  const abortChat = useCallback(() => {
+    const convId = state.activeConversationId
+    if (!convId) return
+    const abortFn = abortMapRef.current.get(convId)
+    if (abortFn) {
+      abortFn()
+      abortMapRef.current.delete(convId)
+    }
+    dispatch({
+      type: 'FINALIZE_STREAMING',
+      payload: {
+        conversationId: convId,
+        finalText: '用户已终止输出。',
+        completedAt: new Date().toISOString(),
+      },
+    })
+  }, [state.activeConversationId])
 
   const uploadFile = useCallback(async (file: File, userId?: string): Promise<UploadedFileMeta | null> => {
     const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
@@ -643,15 +693,24 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
   const addPendingFiles = useCallback((files: FileList | File[]) => {
     const arr = Array.from(files)
-    const pending: PendingFile[] = arr.map((f) => ({
+    const invalid: string[] = []
+    const valid = arr.filter((f) => {
+      if (isAllowedFormat(f.name)) return true
+      invalid.push(f.name)
+      return false
+    })
+    if (invalid.length > 0) {
+      toast.error(`格式不支持（仅限 ${getAllowedFormatList()}）：${invalid.join('、')}`)
+    }
+    if (valid.length === 0) return
+    const pending: PendingFile[] = valid.map((f) => ({
       uid: `pf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       file: f,
       name: f.name,
       size: f.size,
-      isArchive: isArchiveFile(f.name),
     }))
     dispatch({ type: 'ADD_PENDING_FILES', payload: pending })
-  }, [])
+  }, [toast])
 
   const removePendingFile = useCallback((uid: string) => {
     dispatch({ type: 'REMOVE_PENDING_FILE', payload: uid })
@@ -671,11 +730,10 @@ export function ChatProvider({ children }: { children: ReactNode }) {
 
     const userId = targetUserId || localStorage.getItem('zhiwei_user_id') || 'default'
 
-    const progress = pending.map<UploadProgressItem>((pf) => ({
+    const progress: UploadProgressItem[] = pending.map((pf) => ({
       uid: pf.uid,
       name: pf.name,
-      status: 'waiting',
-      archiveChildren: pf.isArchive ? [] : undefined,
+      status: 'waiting' as const,
     }))
     dispatch({ type: 'SET_UPLOADING', payload: true })
     dispatch({ type: 'UPDATE_UPLOAD_PROGRESS', payload: progress })
@@ -688,13 +746,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       const updated: UploadProgressItem[] = pending.map((pf) => {
         const match = result.files.find((f: any) => f.file_name === pf.name) as any
         if (match) {
-          const archiveChildren = match.is_archive && match.extracted_files?.length
-            ? match.extracted_files.map((ef: any) => ({
-                name: ef.name,
-                status: ef.status === 'done' ? 'done' as const : 'error' as const,
-                error: ef.error,
-              }))
-            : undefined
           return {
             uid: pf.uid,
             name: pf.name,
@@ -704,7 +755,6 @@ export function ChatProvider({ children }: { children: ReactNode }) {
               : match.rag_status === 'pending'
                 ? '索引超时，仍在处理中'
                 : undefined,
-            archiveChildren,
           } as UploadProgressItem
         }
         const errMatch = result.errors.find((e) => e.filename === pf.name)
@@ -737,7 +787,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     } finally {
       dispatch({ type: 'SET_UPLOADING', payload: false })
     }
-  }, [])
+  }, [toast])
 
   const logout = useCallback(() => {
     localStorage.removeItem('zhiwei_user_id')
@@ -856,9 +906,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     state,
     dispatch,
     sendChat,
+    abortChat,
     newConversation,
     switchConversation,
     removeConversation,
+    renameConversation: renameConversationAction,
     setCategory,
     uploadFile,
     removeUploadedFile,
@@ -896,9 +948,11 @@ export function useChat() {
     loggedIn: ctx.state.loggedIn,
     role: ctx.state.role,
     sendChat: ctx.sendChat,
+    abortChat: ctx.abortChat,
     newConversation: ctx.newConversation,
     switchConversation: ctx.switchConversation,
     removeConversation: ctx.removeConversation,
+    renameConversation: ctx.renameConversation,
     setCategory: ctx.setCategory,
     uploadFile: ctx.uploadFile,
     removeUploadedFile: ctx.removeUploadedFile,

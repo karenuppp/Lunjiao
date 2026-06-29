@@ -2,20 +2,37 @@ import { useState, useRef, useEffect, useCallback, memo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Select, Spin } from 'antd'
-import { User, Sparkles, Loader2, X, FileText, Table2, Presentation, Archive, Image as ImageIcon, FileType, Paperclip } from 'lucide-react'
-import { listPromptTemplates, type PromptTemplate } from '../api/chat'
+import { User, Sparkles, Loader2, X, FileText, Table2, Presentation, Image as ImageIcon, FileType, Paperclip } from 'lucide-react'
+import { listPromptTemplates, type PromptTemplate, isAllowedFormat, downloadSkillFile } from '../api/chat'
 import { exportToDocx, exportToXlsx, hasLargeTable } from '../utils/export'
 import './chat.css'
+
+const fakeThinkingTags = ['检索经验库', '检索知识库', '查询数据库', '查看文件']
+
+function formatTime(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const y = d.getFullYear()
+  const mo = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  const h = String(d.getHours()).padStart(2, '0')
+  const mi = String(d.getMinutes()).padStart(2, '0')
+  const s = String(d.getSeconds()).padStart(2, '0')
+  return `${y}-${mo}-${day} ${h}:${mi}:${s}`
+}
 
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
+  created_at?: string
   data_sources_used?: string[]
   message_id?: string
   feedback_rating?: 'up' | 'down'
   experience_suggest?: { topic: string; summary: string; category?: string } | null
   template_name?: string
+  skills_used?: string[]
+  skill_downloads?: Record<string, string>
 }
 
 interface ContextFile {
@@ -34,6 +51,7 @@ interface ChatPanelProps {
   currentTool: string | null
   highlightMessageId?: string | null
   onSendChat: (message: string, contextFiles?: ContextFile[], category?: string, visibleMessage?: string, systemPrompt?: string) => void
+  onStop: () => void
   onFeedback: (messageId: string, rating: 'up' | 'down') => void
   onSaveExperienceSuggestion?: (messageId: string) => void
   onDismissExperienceSuggestion?: (messageId: string) => void
@@ -58,9 +76,6 @@ function getFileTypeMeta(filename: string) {
     case 'xls':
     case 'csv':   return { icon: <Table2 size={14} />,       colorClass: 'file-green' }
     case 'pptx':  return { icon: <Presentation size={14} />, colorClass: 'file-orange' }
-    case 'zip':
-    case 'rar':
-    case '7z':    return { icon: <Archive size={14} />,      colorClass: 'file-purple' }
     case 'png':
     case 'jpg':
     case 'jpeg':  return { icon: <ImageIcon size={14} />,    colorClass: 'file-pink' }
@@ -123,6 +138,18 @@ const MessageItem = memo(function MessageItem({
   const msgId = msg.message_id || msg.id
   const isHighlighted = highlightMessageId && (msgId === highlightMessageId || msg.id === highlightMessageId)
 
+  // Fake thinking tags: cycle while waiting for first token
+  const [fakeTagIdx, setFakeTagIdx] = useState(0)
+  const showFakeTags = showLoadingBubble && !msg.content
+
+  useEffect(() => {
+    if (!showFakeTags) return
+    const interval = setInterval(() => {
+      setFakeTagIdx(i => (i + 1) % fakeThinkingTags.length)
+    }, 1500)
+    return () => clearInterval(interval)
+  }, [showFakeTags])
+
   return (
     <div
       key={msg.id}
@@ -151,6 +178,12 @@ const MessageItem = memo(function MessageItem({
             ))}
           </div>
         )}
+        {showFakeTags && !currentTool && (
+          <div className="fake-thinking-tag">
+            <Loader2 size={14} className="progress-spinner" />
+            <span>{fakeThinkingTags[fakeTagIdx]}</span>
+          </div>
+        )}
         {showLoadingBubble && currentTool && (
           <div className="tool-call-indicator">
             <Loader2 size={14} className="progress-spinner" />
@@ -158,6 +191,9 @@ const MessageItem = memo(function MessageItem({
           </div>
         )}
 
+        {msg.created_at && (
+          <div className="message-time">{formatTime(msg.created_at)}</div>
+        )}
         <div className={`message-bubble ${msg.role}`}>
           {msg.role === 'user' ? (
             <p style={{ margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{msg.content}</p>
@@ -176,10 +212,28 @@ const MessageItem = memo(function MessageItem({
         {/* Download cards: docx for long text, xlsx for large tables */}
         {msg.role === 'assistant' && !showLoadingBubble && msg.content && (
           <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-            {msg.content.length > 500 && (
+            {(msg.content.length > 500 || msg.skill_downloads?.['公文格式']) && (
               <div
                 className="download-card"
-                onClick={() => exportToDocx(msg.content)}
+                onClick={async () => {
+                  const downloadId = msg.skill_downloads?.['公文格式']
+                  if (downloadId) {
+                    try {
+                      const blob = await downloadSkillFile(downloadId)
+                      const url = URL.createObjectURL(blob)
+                      const a = document.createElement('a')
+                      a.href = url
+                      a.download = '公文格式.docx'
+                      a.click()
+                      URL.revokeObjectURL(url)
+                    } catch (e) {
+                      console.error('Skill download failed, falling back to client export:', e)
+                      exportToDocx(msg.content)
+                    }
+                  } else {
+                    exportToDocx(msg.content)
+                  }
+                }}
                 title="下载为 Word 文档"
               >
                 <FileType size={16} style={{ color: '#2563EB' }} />
@@ -207,7 +261,7 @@ const MessageItem = memo(function MessageItem({
                 const msgId = msg.message_id || msg.id
                 onFeedback(msgId, 'up')
               }}
-              title="回答有用"
+              title="点赞将这个回答提炼成经验"
               disabled={!!msg.feedback_rating}
             >
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -227,6 +281,12 @@ const MessageItem = memo(function MessageItem({
                 <path d="M17 2v11m5-2v-7a2 2 0 0 0-2-2H7.6a2 2 0 0 0-1.94 1.52l-2.1 8.4A2 2 0 0 0 5.5 14H10v6a2 2 0 0 0 2 2l5-9Z"/>
               </svg>
             </button>
+            {!msg.feedback_rating && (
+              <span className="feedback-hint">点赞将这个回答提炼成经验</span>
+            )}
+            {msg.feedback_rating === 'up' && (
+              <span className="feedback-hint">这个回答已提炼成经验</span>
+            )}
             {msg.feedback_rating === 'down' && (
               <span className="feedback-hint">请继续与我对话，帮我纠正这个回答</span>
             )}
@@ -267,7 +327,7 @@ const MessageItem = memo(function MessageItem({
 
 export default function ChatPanel({
   messages, loadingConversationIds, activeConversationId, currentTool, highlightMessageId,
-  onSendChat, onFeedback,
+  onSendChat, onStop, onFeedback,
   onSaveExperienceSuggestion, onDismissExperienceSuggestion,
   uploadFile,
 }: ChatPanelProps) {
@@ -394,6 +454,10 @@ export default function ChatPanel({
     const arr = Array.from(files)
     for (let i = 0; i < arr.length && newFiles.length < remainingSlots; i++) {
       const f = arr[i]
+      if (!isAllowedFormat(f.name)) {
+        newFiles.push({ id: `cf-${++fileIdCounter}`, name: f.name, size: f.size, file: f, status: 'error', error: '格式不支持' })
+        continue
+      }
       if (f.size > MAX_SIZE) {
         newFiles.push({ id: `cf-${++fileIdCounter}`, name: f.name, size: f.size, file: f, status: 'error', error: '超过10MB' })
         continue
@@ -462,6 +526,10 @@ export default function ChatPanel({
     setContextFiles([])
   }
 
+  const handleStop = () => {
+    onStop()
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
@@ -525,7 +593,6 @@ export default function ChatPanel({
               value={selectedTemplateId}
               onChange={(val) => setSelectedTemplateId(val)}
               placeholder="选择提示词模板"
-              allowClear
               style={selectStyles}
               getPopupContainer={() => document.body}
               options={templates.map(t => ({
@@ -551,6 +618,7 @@ export default function ChatPanel({
             ref={fileInputRef}
             type="file"
             multiple
+            accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt,.md"
             className="hidden-file-input"
             onChange={handleFileInputChange}
           />
@@ -562,13 +630,19 @@ export default function ChatPanel({
           >
             <Paperclip size={18} strokeWidth={1.8} />
           </button>
-          <button
-            className={`send-btn ${canSend ? 'active' : ''}`}
-            onClick={handleSend}
-            disabled={!canSend}
-          >
-            {'发送'}
-          </button>
+          {isThisConversationLoading ? (
+            <button className="send-btn active stop" onClick={handleStop}>
+              {'停止'}
+            </button>
+          ) : (
+            <button
+              className={`send-btn ${canSend ? 'active' : ''}`}
+              onClick={handleSend}
+              disabled={!canSend}
+            >
+              {'发送'}
+            </button>
+          )}
         </div>
 
         {contextFiles.length > 0 && (

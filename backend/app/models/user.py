@@ -10,7 +10,7 @@ class User(Base):
     password = Column(String(128), nullable=False, comment="密码")
     role = Column(String(16), nullable=False, default="user", comment="角色: admin | user")
     # 查询权限
-    kb_scope = Column(String(16), nullable=False, default="personal", comment="知识库查询范围: public | personal | none")
+    kb_scope = Column(String(16), nullable=False, default="none", comment="知识库查询范围: public | none")
     db_scope = Column(Text, nullable=True, comment="数据库查询范围 (JSON array of connection IDs)")
     # 经验提取权限
     exp_extract_enabled = Column(Boolean, nullable=False, default=False, comment="是否允许该用户的点赞回答触发经验提取")

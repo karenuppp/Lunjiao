@@ -9,52 +9,76 @@ from app.rag_engine import rag
 from app.models.db_connection import DbConnection
 from app.services import db_service
 from app.services import experience_service
+from app.logger import get_logger
 from pathlib import Path
 import os
 
+logger = get_logger(__name__)
+
 
 async def query_rag(query_text: str, category: str = "", top_k: int = 5,
-                    user_id: str = "default", kb_scope: str = "personal") -> str:
-    include_public = (kb_scope == "public")
+                    user_id: str = "default", kb_scope: str = "none") -> str:
+    """Search uploaded documents.
 
+    Search order:
+      1. If kb_scope="public": Public KB → filtered by category (exact tag match)
+      2. Personal KB → always searched WITHOUT category filter (all files)
+
+    Personal KB is always accessible to every user. Public KB only when
+    the admin grants kb_scope="public".
+    """
+    include_public = (kb_scope == "public")
     category_param = category if category else None
 
-    async def _do_search(effective_user: str) -> list[dict]:
-        results = await rag.search(query_text, category=category_param,
+    async def _do_search(effective_user: str, cat: str | None = None) -> list[dict]:
+        results = await rag.search(query_text, category=cat,
                                    top_k=top_k, user_id=effective_user)
-        if not results:
-            results = await rag.search_text(query_text, category=category_param,
-                                            top_k=top_k, user_id=effective_user)
         return list(results) if results else []
 
     try:
-        # Always search public KB first, then personal KB.
-        # When a category is specified, the RAG engine's _search_with_category
-        # performs exact-match filtering — only files tagged with that
-        # exact category are returned.
+        all_results: list[dict] = []
+
         if include_public and user_id != "default":
-            all_results = await asyncio.wait_for(
-                _do_search("default"),
+            # 1. Public KB: search with category filter (exact tag match)
+            pub_results = await asyncio.wait_for(
+                _do_search("default", cat=category_param),
                 timeout=settings.rag_query_timeout + 5,
             )
-            personal_results = await asyncio.wait_for(
-                _do_search(user_id),
+            all_results.extend(pub_results)
+
+        # 2. Personal KB: always search WITHOUT category filter (all files)
+        pers_results = await asyncio.wait_for(
+            _do_search(user_id, cat=None),
+            timeout=settings.rag_query_timeout + 5,
+        )
+        seen = {r.get("text", "") for r in all_results}
+        for r in pers_results:
+            if r.get("text", "") not in seen:
+                all_results.append(r)
+
+        # 3. Fallback: if category filter yielded nothing in public KB,
+        #    retry public KB without filter
+        if not all_results and category_param:
+            logger.warning(
+                f"[RAG:Tool] Category '{category}' matched nothing in public KB, "
+                f"retrying public KB without category filter"
+            )
+            pub_retry = await asyncio.wait_for(
+                _do_search("default", cat=None),
                 timeout=settings.rag_query_timeout + 5,
             )
             seen = {r.get("text", "") for r in all_results}
-            for r in personal_results:
+            for r in pub_retry:
                 if r.get("text", "") not in seen:
                     all_results.append(r)
-                    seen.add(r.get("text", ""))
-        else:
-            all_results = await asyncio.wait_for(
-                _do_search(user_id),
-                timeout=settings.rag_query_timeout + 5,
-            )
 
         if not all_results:
             if category:
-                return f"No relevant content found in the '{category}' category documents."
+                return (
+                    f"No content found with tag '{category}'. "
+                    f"Also checked all untagged documents — no relevant results. "
+                    f"Try rephrasing the question."
+                )
             return "No relevant document content found in the uploaded files."
 
         formatted_parts = [f"**Document Search Results ({len(all_results)} chunks):**\n"]
@@ -321,10 +345,11 @@ async def find_file_by_name(keyword: str, user_id: str = "default") -> str:
         return f"读取文件「{original_name}」时出错：{str(e)}"
 
 
-async def query_experience(query_text: str, top_k: int = 3,
+async def query_experience(query_text: str, category: str = "", top_k: int = 3,
                            user_id: str = "default") -> str:
+    """Search historical experiences, optionally filtered by tag/category."""
     results = await experience_service.search_relevant(
-        query_text=query_text, user_id=user_id, top_k=top_k
+        query_text=query_text, user_id=user_id, top_k=top_k, category=category or None,
     )
 
     if not results:
@@ -338,7 +363,12 @@ async def query_experience(query_text: str, top_k: int = 3,
 
 
 async def use_skill(skill_name: str) -> str:
-    """Look up a skill by name and return its specification for the agent to follow."""
+    """Look up a skill by name and return its body (core workflow) for the agent to follow.
+
+    Returns only the main body (≤100 lines) to keep context lean.
+    Hints at the end tell the agent whether detailed references or
+    executable scripts are available on demand.
+    """
     from app.database import SessionLocal
     from app.models.skill import Skill
 
@@ -346,7 +376,6 @@ async def use_skill(skill_name: str) -> str:
     try:
         row = db.query(Skill).filter(Skill.title == skill_name).first()
         if not row:
-            # Try partial match
             row = db.query(Skill).filter(Skill.title.ilike(f"%{skill_name}%")).first()
         if not row:
             available = db.query(Skill.title).all()
@@ -354,21 +383,206 @@ async def use_skill(skill_name: str) -> str:
             if names:
                 return f"未找到技能「{skill_name}」。可用技能：{', '.join(names)}"
             return f"未找到技能「{skill_name}」，且当前没有已配置的技能。"
+
+        parts = [f"**技能：{row.title}**\n"]
+
+        if row.description:
+            parts.append(f"*{row.description}*\n")
+
+        parts.append(row.body or row.content)
+
+        # Hint at available on-demand resources
+        hints = []
+        if row.references:
+            hints.append(f'详细参考文档：使用 get_skill_reference("{row.title}") 查阅')
+        if row.scripts:
+            import json as _json
+            try:
+                script_list = _json.loads(row.scripts) if isinstance(row.scripts, str) else row.scripts
+                names = [s["name"] for s in script_list if isinstance(s, dict) and s.get("name")]
+                if names:
+                    name_str = "、".join(names)
+                    hints.append(
+                        f'可执行脚本：{name_str}，使用 '
+                        f'run_skill_script("{row.title}", script_name) 执行'
+                    )
+            except Exception:
+                pass
+
+        if hints:
+            parts.append("")
+            parts.append("---")
+            for h in hints:
+                parts.append(f"- {h}")
+
+        return "\n".join(parts)
+    finally:
+        db.close()
+
+
+async def get_skill_reference(skill_name: str) -> str:
+    """Load the detailed reference docs for a skill on demand.
+
+    Skills store their core workflow in 'body' (returned by use_skill)
+    and detailed docs in 'references'. Call this only when the user
+    asks for more detail or the body says to consult the references.
+    """
+    from app.database import SessionLocal
+    from app.models.skill import Skill
+
+    db = SessionLocal()
+    try:
+        row = db.query(Skill).filter(Skill.title == skill_name).first()
+        if not row:
+            row = db.query(Skill).filter(Skill.title.ilike(f"%{skill_name}%")).first()
+        if not row:
+            return f"未找到技能「{skill_name}」。"
+        if not row.references:
+            return f"技能「{row.title}」没有参考文档。"
         return (
-            f"**技能：{row.title}**\n\n"
-            f"{row.content}"
+            f"**参考文档：{row.title}**\n\n"
+            f"{row.references}"
         )
     finally:
         db.close()
 
 
-async def run_code(code: str, timeout: int = 60) -> str:
+async def run_skill_script(skill_name: str, script_name: str,
+                           content: str = "",
+                           timeout: int = 60) -> str:
+    """Execute a named script from a skill in the Docker sandbox.
+
+    Looks up the script by name in the skill's scripts JSON, then
+    runs it via the sandbox executor. The ``content`` parameter is
+    written to ``/sandbox/input.md`` so the script can process it.
+
+    If the script generates output files in ``/sandbox/output/``,
+    they are moved to a persistent download directory and a JSON
+    result with ``download_id`` is included in the return value.
+    """
+    from app.database import SessionLocal
+    from app.models.skill import Skill
+    from app.config import settings
+    import json as _json
+    import os as _os
+    import shutil as _shutil
+    from pathlib import Path as _Path
+    import uuid as _uuid
+
+    db = SessionLocal()
+    try:
+        row = db.query(Skill).filter(Skill.title == skill_name).first()
+        if not row:
+            row = db.query(Skill).filter(Skill.title.ilike(f"%{skill_name}%")).first()
+        if not row:
+            return f"未找到技能「{skill_name}」。"
+        if not row.scripts:
+            return f"技能「{row.title}」没有可执行脚本。"
+
+        scripts = _json.loads(row.scripts) if isinstance(row.scripts, str) else row.scripts
+        if not isinstance(scripts, list):
+            return f"技能「{row.title}」脚本数据格式异常。"
+
+        target = None
+        for s in scripts:
+            if isinstance(s, dict) and s.get("name") == script_name:
+                target = s
+                break
+        if target is None:
+            available = [s.get("name", "?") for s in scripts if isinstance(s, dict)]
+            return (
+                f"技能「{row.title}」中未找到脚本「{script_name}」。"
+                f"可用脚本：{', '.join(available) if available else '无'}"
+            )
+
+        code = target.get("code", "")
+        if not code or not code.strip():
+            return f"脚本「{script_name}」的代码为空。"
+
+        timeout = int(target.get("timeout", timeout))
+    finally:
+        db.close()
+
+    # Set up extra files and output directory for sandbox
+    extra_files: dict[str, str] = {}
+    if content:
+        extra_files["/sandbox/input.md"] = content
+
+    download_dir = getattr(settings, 'download_dir', str(_Path(__file__).parent.parent.parent / "downloads"))
+    _os.makedirs(download_dir, exist_ok=True)
+    run_output_dir = _os.path.join(download_dir, f".run-{_uuid.uuid4().hex[:8]}")
+    _os.makedirs(run_output_dir, exist_ok=True)
+    _os.chmod(run_output_dir, 0o777)
+
+    try:
+        from app.sandbox import run_code as _sandbox_run, is_available
+
+        if not is_available():
+            return (
+                "[Sandbox Unavailable] Docker is not running or sandbox is "
+                "disabled on this server. Contact the administrator to enable "
+                "the sandbox feature."
+            )
+
+        result = await _sandbox_run(
+            code,
+            timeout=timeout,
+            extra_files=extra_files,
+            output_dir=run_output_dir,
+        )
+
+        # Check if script generated output files
+        result_files = []
+        for f in _os.listdir(run_output_dir):
+            fpath = _os.path.join(run_output_dir, f)
+            if _os.path.isfile(fpath):
+                result_files.append(f)
+
+        if result_files:
+            # Move first output file to persistent download dir
+            src = _os.path.join(run_output_dir, result_files[0])
+            download_id = _uuid.uuid4().hex[:16]
+            ext = _os.path.splitext(result_files[0])[1] or ".docx"
+            dest = _os.path.join(download_dir, download_id)
+            _shutil.move(src, dest)
+
+            # Write metadata
+            meta_path = _os.path.join(download_dir, f"{download_id}.meta")
+            _json.dump(
+                {"filename": result_files[0]},
+                open(meta_path, "w", encoding="utf-8"),
+                ensure_ascii=False,
+            )
+
+            return _json.dumps(
+                {"ok": True, "download_id": download_id, "filename": result_files[0]},
+                ensure_ascii=False,
+            )
+
+        return result
+
+    finally:
+        try:
+            _shutil.rmtree(run_output_dir)
+        except OSError:
+            pass
+
+
+async def run_code(code: str, timeout: int = 60,
+                   extra_files: dict[str, str] | None = None,
+                   output_dir: str | None = None) -> str:
     """Execute Python code in a secure Docker sandbox.
 
     Runs the provided Python code inside an isolated container with
     no network access, limited memory/CPU, and read-only filesystem.
     Use this when a skill workflow requires data analysis, chart
     generation, or computation.
+
+    Args:
+        code: Python source code to execute.
+        timeout: Max execution time in seconds.
+        extra_files: Dict mapping container-path → file-content to mount.
+        output_dir: Host directory mounted writable at /sandbox/output.
     """
     from app.sandbox import run_code as _sandbox_run, is_available
 
@@ -393,7 +607,9 @@ async def run_code(code: str, timeout: int = 60) -> str:
                 f"'{pattern}'. This is not allowed in the sandbox."
             )
 
-    return await _sandbox_run(code, timeout=timeout)
+    return await _sandbox_run(code, timeout=timeout,
+                               extra_files=extra_files,
+                               output_dir=output_dir)
 
 
 TOOL_FUNCTIONS: dict[str, callable] = {
@@ -404,6 +620,8 @@ TOOL_FUNCTIONS: dict[str, callable] = {
     "query_experience": query_experience,
     "find_file_by_name": find_file_by_name,
     "use_skill": use_skill,
+    "get_skill_reference": get_skill_reference,
+    "run_skill_script": run_skill_script,
     "run_code": run_code,
 }
 
@@ -412,13 +630,18 @@ TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "query_experience",
-            "description": "Search historical experiences and knowledge accumulated from past conversations. These experiences are high-quality, user-verified knowledge. Use this when you want to see if similar questions have been answered before.",
+            "description": "Search historical experiences and knowledge accumulated from past conversations. These are high-quality, user-verified knowledge. Use when the question may have been answered before or involves domain-specific procedures/rules. For general knowledge questions (concepts, principles, common methods), skip this and answer directly.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "query_text": {
                         "type": "string",
                         "description": "The question or topic to search for in historical experiences"
+                    },
+                    "category": {
+                        "type": "string",
+                        "description": "Leave empty. The system automatically applies the user's selected tag.",
+                        "default": ""
                     },
                     "top_k": {
                         "type": "integer",
@@ -451,7 +674,7 @@ TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "query_rag",
-            "description": "Search uploaded documents via the local RAG engine. Call this FIRST for EVERY user question — even if you think you already know the answer, because uploaded documents may contain the most current/correct information.",
+            "description": "Search uploaded documents via the local RAG engine. Use when the question requires looking up information that may exist in the knowledge base (policies, reports, manuals, etc.). For general knowledge questions, skip this and answer from your own training data.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -461,7 +684,7 @@ TOOL_SCHEMAS: list[dict] = [
                     },
                     "category": {
                         "type": "string",
-                        "description": "Optional category filter (e.g., '上传文件' for uploaded documents, '设备' for equipment). Empty = all.",
+                        "description": "Leave empty. The system automatically applies the user's selected tag. Do NOT guess or invent a category.",
                         "default": ""
                     },
                     "top_k": {
@@ -507,16 +730,64 @@ TOOL_SCHEMAS: list[dict] = [
         "type": "function",
         "function": {
             "name": "use_skill",
-            "description": "Look up and load a skill specification by name. Skills are predefined workflows created by the admin in the '技能工厂' page. Use this when the user's request matches a skill's purpose (e.g., generating reports, data analysis workflows, document processing). The skill content provides step-by-step instructions to follow.",
+            "description": "Load a skill's core workflow (body). Skills are predefined workflows created by the admin. Use this FIRST when the user's request matches a skill's purpose. The returned body contains step-by-step instructions. If the body mentions detailed references or scripts, call get_skill_reference or run_skill_script afterward.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "skill_name": {
                         "type": "string",
-                        "description": "The name/title of the skill to look up. Use partial matching if unsure."
+                        "description": "The name/title of the skill to load."
                     }
                 },
                 "required": ["skill_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_skill_reference",
+            "description": "Load detailed reference docs for a skill (on-demand). Only call this when use_skill hints that references are available AND the user needs more detail than the body provides.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill_name": {
+                        "type": "string",
+                        "description": "The skill name returned by use_skill."
+                    }
+                },
+                "required": ["skill_name"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "run_skill_script",
+            "description": "Execute a named Python script from a skill in the Docker sandbox. Call this when a skill workflow instructs you to run a specific script. The sandbox has pandas, numpy, matplotlib, plotly, openpyxl, tabulate, python-docx pre-installed. Pass the content to process via the 'content' parameter — it will be written to /sandbox/input.md for the script to read.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skill_name": {
+                        "type": "string",
+                        "description": "The skill name returned by use_skill."
+                    },
+                    "script_name": {
+                        "type": "string",
+                        "description": "The script file name to execute (e.g. 'format_official_docx.py')."
+                    },
+                    "content": {
+                        "type": "string",
+                        "description": "The content (e.g. markdown text) to pass to the script. Written to /sandbox/input.md.",
+                        "default": ""
+                    },
+                    "timeout": {
+                        "type": "integer",
+                        "description": "Maximum execution time in seconds (default 60).",
+                        "default": 60
+                    }
+                },
+                "required": ["skill_name", "script_name"]
             }
         }
     },
@@ -572,7 +843,7 @@ def get_schemas() -> list[dict]:
 
 
 async def execute_tool(name: str, user_id: str = "default",
-                       kb_scope: str = "personal",
+                       kb_scope: str = "none",
                        db_scope: list[int] | None = None,
                        default_category: str = "",
                        **kwargs) -> str:
@@ -592,10 +863,13 @@ async def execute_tool(name: str, user_id: str = "default",
         if name == "query_rag":
             kwargs["user_id"] = user_id
             kwargs["kb_scope"] = kb_scope
-            if not kwargs.get("category") and default_category:
+            # User's selected tag always overrides AI-invented category
+            if default_category:
                 kwargs["category"] = default_category
         elif name == "query_experience":
             kwargs["user_id"] = user_id
+            if default_category:
+                kwargs["category"] = default_category
         elif name == "find_file_by_name":
             kwargs["user_id"] = user_id
         elif name in ("list_db_connections", "list_db_tables", "query_db"):

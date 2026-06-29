@@ -16,7 +16,6 @@ import type { UserRecord, DbConnectionRecord } from '../api/chat'
 
 const KB_SCOPE_LABELS: Record<string, string> = {
   public: '公共知识库',
-  personal: '个人知识库',
   none: '不授权',
 }
 
@@ -43,7 +42,7 @@ export default function UserManagePage() {
 
   const [permModalOpen, setPermModalOpen] = useState(false)
   const [permUserId, setPermUserId] = useState<number | null>(null)
-  const [permKbScope, setPermKbScope] = useState('personal')
+  const [permKbScope, setPermKbScope] = useState('none')
   const [permDbScope, setPermDbScope] = useState<number[]>([])
   const [permSubmitting, setPermSubmitting] = useState(false)
   const [dbConnections, setDbConnections] = useState<DbConnectionRecord[]>([])
@@ -141,7 +140,7 @@ export default function UserManagePage() {
   const openPermModal = async (userId: number) => {
     setPermUserId(userId)
     setPermModalOpen(true)
-    setPermKbScope('personal')
+    setPermKbScope('none')
     setPermDbScope([])
     setDbLoading(true)
 
@@ -150,7 +149,7 @@ export default function UserManagePage() {
         getUserQueryPermission(userId),
         listDbConnections(),
       ])
-      setPermKbScope(perm.kb_scope || 'personal')
+      setPermKbScope(perm.kb_scope || 'none')
       setPermDbScope(perm.db_scope || [])
       setDbConnections(conns)
     } catch (err: any) {
@@ -185,7 +184,7 @@ export default function UserManagePage() {
       // Need current kb_scope/db_scope — grab from state
       const user = users.find(u => u.id === userId)
       await setUserQueryPermission(userId, {
-        kb_scope: user?.kb_scope || 'personal',
+        kb_scope: user?.kb_scope || 'none',
         db_scope: user?.db_scope || null,
         exp_extract_enabled: enabled,
       })
@@ -405,7 +404,6 @@ export default function UserManagePage() {
                 style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
               >
                 <Radio value="public">公共知识库</Radio>
-                <Radio value="personal" disabled>个人知识库</Radio>
                 <Radio value="none">不授权</Radio>
               </Radio.Group>
             </div>

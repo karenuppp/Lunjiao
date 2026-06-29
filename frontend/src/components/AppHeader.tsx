@@ -103,9 +103,6 @@ export default function AppHeader({
           </div>
         ))
       )}
-      <div className="skill-hint">
-        💡 在提问中使用对应关键词即可触发技能，如"整理成公文格式"
-      </div>
     </div>
   )
 

@@ -12,7 +12,7 @@ import type { UploadedFileMeta, PromptTemplate } from '../api/chat'
 
 import {
   UploadCloud, FileText, FileType, Table2,
-  Presentation, Archive, Image as ImageIcon, Loader2, Search, RefreshCw,
+  Presentation, Image as ImageIcon, Loader2, Search, RefreshCw,
   Trash2, XCircle, CheckCircle2, Inbox,
   Check,
 } from 'lucide-react'
@@ -47,12 +47,6 @@ function getFileTypeMeta(filename: string) {
     case 'xls':
     case 'csv':   return { icon: <Table2 size={16} />,       label: 'XLS',   colorClass: 'file-green' }
     case 'pptx':  return { icon: <Presentation size={16} />, label: 'PPT',   colorClass: 'file-orange' }
-    case 'zip':
-    case 'rar':
-    case '7z':
-    case 'tar':
-    case 'tgz':
-    case 'tar.gz':return { icon: <Archive size={16} />,      label: ext.toUpperCase(), colorClass: 'file-purple' }
     case 'png':
     case 'jpg':
     case 'jpeg':  return { icon: <ImageIcon size={16} />,    label: 'IMG',   colorClass: 'file-pink' }
@@ -106,15 +100,6 @@ function UploadModalBody({ onDone, scope }: { onDone: () => void; scope: 'all' |
     setTimeout(() => onDone(), 600)
   }
 
-  useEffect(() => {
-    if (!isUploading && uploadProgress.length > 0) {
-      const hasArchive = uploadProgress.some(p => p.archiveChildren && p.archiveChildren.length > 0)
-      if (hasArchive && uploadProgress.every(p => p.status === 'done' || p.status === 'error')) {
-        toast.success('解压成功')
-      }
-    }
-  }, [isUploading, uploadProgress, toast])
-
   const showProgress = isUploading || (uploadProgress.length > 0 && pendingFiles.length === 0)
 
   return (
@@ -130,15 +115,14 @@ function UploadModalBody({ onDone, scope }: { onDone: () => void; scope: 'all' |
         <UploadCloud size={40} className="upload-zone-icon" />
         <div className="zone-title">拖拽文件到此处，或点击选择</div>
         <div className="zone-hint">
-          支持 PDF、Word、Excel、PPT、CSV、TXT、Markdown 等格式<br />
-          压缩包（.zip/.rar/.7z）将自动解压
+          支持 PDF、Word、Excel、CSV、TXT、Markdown 等格式
         </div>
       </div>
 
       <input
         ref={fileInputRef}
         type="file" multiple hidden
-        accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.csv,.txt,.md,.zip,.rar,.7z,.tar.gz,.tgz,.png,.jpg,.jpeg"
+        accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.txt,.md"
         onChange={(e) => handleFileSelect(e.target.files)}
       />
 
@@ -176,28 +160,11 @@ function UploadModalBody({ onDone, scope }: { onDone: () => void; scope: 'all' |
                         <div className="progress-desc">
                           {item.status === 'waiting' && '等待上传'}
                           {item.status === 'uploading' && '上传中...'}
-                          {item.status === 'unpacking' && '解压中...'}
                           {item.status === 'indexing' && '索引中...'}
                           {item.status === 'done' && '完成'}
                         </div>
                       )}
                     </div>
-                    {item.archiveChildren && item.archiveChildren.length > 0 && (
-                      <div className="kb-archive-children">
-                        {item.archiveChildren.map((child, ci) => (
-                          <div key={ci} className={`kb-child-item ${child.status}`}>
-                            <div className="progress-status-icon">
-                              {child.status === 'done' && <CheckCircle2 size={12} className="text-success" />}
-                              {child.status === 'error' && <XCircle size={12} className="text-error" />}
-                            </div>
-                            <div className="progress-info">
-                              <div className="progress-name">{child.name}</div>
-                              {child.error && <div className="progress-error">{child.error}</div>}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
                   </div>
                 ))}
               </div>
@@ -221,7 +188,7 @@ function UploadModalBody({ onDone, scope }: { onDone: () => void; scope: 'all' |
                   <div className="file-info">
                     <div className="file-name">{pf.name}</div>
                     <div className="file-size">
-                      {formatSize(pf.size)}{pf.isArchive && ' · 压缩包'}
+                      {formatSize(pf.size)}
                     </div>
                   </div>
                   <button

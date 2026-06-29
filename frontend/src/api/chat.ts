@@ -109,6 +109,15 @@ export async function deleteConversation(id: string): Promise<void> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
 }
 
+export async function renameConversation(id: string, title: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/history/${id}/rename`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+}
+
 export async function loadMessages(conversationId: string): Promise<Record<string, unknown>> {
   const res = await fetch(`${BASE_URL}/history/${conversationId}/messages`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -207,9 +216,20 @@ export async function uploadFilesBatchWithUser(
   return res.json()
 }
 
-export function isArchiveFile(filename: string): boolean {
-  const ext = filename.toLowerCase()
-  return ext.endsWith('.zip') || ext.endsWith('.rar') || ext.endsWith('.7z') || ext.endsWith('.tar.gz') || ext.endsWith('.tgz')
+const ALLOWED_FORMATS = new Set<string>([
+  '.pdf', '.docx', '.doc', '.xlsx', '.xls', '.csv', '.txt', '.md',
+])
+
+export function isAllowedFormat(filename: string): boolean {
+  const lower = filename.toLowerCase()
+  for (const ext of ALLOWED_FORMATS) {
+    if (lower.endsWith(ext)) return true
+  }
+  return false
+}
+
+export function getAllowedFormatList(): string {
+  return Array.from(ALLOWED_FORMATS).join(',')
 }
 
 export interface DbFieldInfo {
@@ -599,6 +619,9 @@ export interface SkillRecord {
   title: string
   description: string
   content: string
+  body: string
+  references: string | null
+  scripts: Array<{ name: string; code: string; entry: boolean; timeout: number }> | null
   created_by: string
   created_at: string | null
   updated_at: string | null
@@ -644,7 +667,7 @@ export async function deleteSkill(id: number): Promise<void> {
   }
 }
 
-export async function generateSkill(title: string, requirement: string): Promise<{ ok: boolean; content: string; description: string }> {
+export async function generateSkill(title: string, requirement: string): Promise<{ ok: boolean; content: string; description: string; body: string; references: string | null; scripts: Array<{ name: string; code: string; entry: boolean; timeout: number }> }> {
   const res = await fetch(`${BASE_URL}/skills/generate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -655,6 +678,15 @@ export async function generateSkill(title: string, requirement: string): Promise
     throw new Error((data as any).detail || `HTTP ${res.status}`)
   }
   return res.json()
+}
+
+export async function downloadSkillFile(downloadId: string): Promise<Blob> {
+  const res = await fetch(`${BASE_URL}/chat/download/${downloadId}`)
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error((data as any).detail || `HTTP ${res.status}`)
+  }
+  return res.blob()
 }
 
 export interface SearchResult {

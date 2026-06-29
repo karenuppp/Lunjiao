@@ -9,8 +9,22 @@ TAR_FILE="${IMAGE_NAME}_${TAG}.tar"
 
 cd "$(dirname "$0")"
 
+# Copy fonts from project fonts directory into build context
+FONTS_SRC="../../fonts"
+if [ -d "$FONTS_SRC" ]; then
+    echo "==> Copying fonts from ${FONTS_SRC}"
+    rm -rf fonts
+    cp -r "$FONTS_SRC" fonts
+else
+    echo "==> Warning: fonts directory not found at ${FONTS_SRC}, skipping"
+    mkdir -p fonts
+fi
+
 echo "==> Building sandbox image: ${FULL_NAME}"
 docker build -t "${FULL_NAME}" .
+
+# Clean up copied fonts
+rm -rf fonts
 
 if [ "${1}" = "--export" ]; then
     echo "==> Exporting to: ${TAR_FILE}"

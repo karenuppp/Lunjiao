@@ -230,6 +230,24 @@ def _cleanup_chat_uploads(conv_id: str) -> int:
     return deleted
 
 
+class RenameRequest(BaseModel):
+    title: str
+
+
+@router.put("/{conversation_id}/rename")
+async def rename_conversation(conversation_id: str, req: RenameRequest):
+    data = _read_conv(conversation_id)
+    if not data:
+        return {"status": "not_found"}
+    new_title = req.title.strip()[:80]
+    if not new_title:
+        return {"status": "empty_title"}
+    data["title"] = new_title
+    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _write_conv(data)
+    return {"status": "ok", "title": new_title}
+
+
 @router.delete("/{conversation_id}")
 async def delete_conversation(conversation_id: str):
     ok = persistent_store.delete(conversation_id)

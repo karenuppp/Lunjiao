@@ -10,6 +10,8 @@ export interface Message {
   feedback_rating?: 'up' | 'down'
   template_name?: string
   experience_suggest?: { topic: string; summary: string; category?: string } | null
+  skills_used?: string[]
+  skill_downloads?: Record<string, string>
 }
 
 export interface Conversation {
@@ -107,17 +109,15 @@ export interface PendingFile {
   file: File
   name: string
   size: number
-  isArchive: boolean
 }
 
-export type FileUploadStatus = 'waiting' | 'uploading' | 'unpacking' | 'indexing' | 'done' | 'error'
+export type FileUploadStatus = 'waiting' | 'uploading' | 'indexing' | 'done' | 'error'
 
 export interface UploadProgressItem {
   uid: string
   name: string
   status: FileUploadStatus
   error?: string
-  archiveChildren?: { name: string; status: FileUploadStatus; error?: string }[]
 }
 
 export interface ChartSeries {

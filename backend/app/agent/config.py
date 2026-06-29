@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 class ReActConfig:
     """Reasoning-acting loop configuration."""
 
-    max_rounds: int = 5
+    max_rounds: int = 3
     """Maximum tool-calling rounds before forcing a final answer."""
 
     temperature: float = 0.2

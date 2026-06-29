@@ -151,9 +151,9 @@ async def _llm_extract_experiences(
 async def _index_experience_to_rag(exp: Experience):
     try:
         from app.rag_engine import rag
-        await rag._ensure_ready(f"exp_{exp.user_id}")
+        await rag._ensure_ready("exp_public")
 
-        lightrag = rag._rags[f"exp_{exp.user_id}"].lightrag
+        lightrag = rag._rags["exp_public"].lightrag
 
         doc_key = f"exp_{exp.id}"
         text_content = f"标题: {exp.title}\n内容: {exp.content}\n标签: {', '.join(exp.tags or [])}"
@@ -179,7 +179,7 @@ async def _index_experience_to_rag(exp: Experience):
         logger.error(f"[Experience:Vector] Index failed for exp_{exp.id}: {e}")
 
 
-async def _remove_experience_from_rag(exp_id: int, user_id: str):
+async def _remove_experience_from_rag(exp_id: int):
     logger.info(f"[Experience:Vector] Removal requested for exp_{exp_id} (soft-skipped)")
 
 
@@ -193,26 +193,36 @@ def _compute_recency_weight(created_at, last_accessed) -> float:
 
 
 async def _check_semantic_duplicate(content: str, user_id: str) -> Optional[Experience]:
-    """Check for near-duplicate by searching the experience vector index."""
+    """Check for near-duplicate by searching the experience vector index, with DB fallback."""
     results = await _search_vector_only(content, user_id, top_k=1)
-    if not results:
-        return None
-
-    top = results[0]
-    # Parse title from indexed text (format: "标题: xxx\n内容: yyy\n标签: zzz")
-    match = re.search(r'标题:\s*(.+?)(?:\n|$)', top["text"])
-    if not match:
-        return None
-    title = match.group(1).strip()
+    title = None
+    if results:
+        top = results[0]
+        match = re.search(r'标题:\s*(.+?)(?:\n|$)', top["text"])
+        if match:
+            title = match.group(1).strip()
 
     db = SessionLocal()
     try:
-        exp = db.query(Experience).filter(
-            Experience.user_id == user_id,
-            Experience.title == title,
-            Experience.status.in_([ExperienceStatus.active, ExperienceStatus.pending]),
-        ).first()
-        return exp
+        if title:
+            exp = db.query(Experience).filter(
+                Experience.title == title,
+                Experience.status.in_([ExperienceStatus.active, ExperienceStatus.pending]),
+            ).first()
+            if exp:
+                return exp
+
+        # DB fallback: keyword match on title when vector search misses
+        keywords = [w for w in content[:60].split() if len(w) >= 2][:4]
+        if keywords:
+            from sqlalchemy import or_
+            conditions = [Experience.title.contains(kw) for kw in keywords]
+            exp = db.query(Experience).filter(
+                Experience.status.in_([ExperienceStatus.active, ExperienceStatus.pending]),
+                or_(*conditions),
+            ).first()
+            return exp
+        return None
     finally:
         db.close()
 
@@ -222,10 +232,10 @@ async def _search_vector_only(
 ) -> list[dict]:
     try:
         from app.rag_engine import rag
-        await rag._ensure_ready(f"exp_default")
+        await rag._ensure_ready("exp_public")
         from lightrag.base import QueryParam
 
-        rag_instance = rag._rags.get(f"exp_default")
+        rag_instance = rag._rags.get("exp_public")
         if not rag_instance or not getattr(rag_instance, "lightrag", None):
             logger.warning("[Experience:Search] LightRAG not initialized, skip vector search")
             return []
@@ -264,6 +274,7 @@ async def search_relevant(
     query_text: str,
     user_id: str,
     top_k: int | None = None,
+    category: str | None = None,
 ) -> list[dict]:
     top_k = top_k or settings.experience_top_k
 
@@ -276,14 +287,6 @@ async def search_relevant(
         keywords = query_text.strip().split()
         db_results: list[dict] = []
         if keywords:
-            db_query = db.query(Experience).filter(
-                Experience.user_id == user_id,
-                Experience.status == ExperienceStatus.active,
-            )
-            keyword_filter = db_query.filter(
-                db_query.column_descriptions[0] == db_query.column_descriptions[0]  # dummy, will rebuild
-            )
-            # Build OR conditions for keyword matching on title and content
             from sqlalchemy import or_
             conditions = []
             for kw in keywords[:3]:  # limit to 3 keywords
@@ -291,7 +294,6 @@ async def search_relevant(
                 conditions.append(Experience.content.contains(kw))
             if conditions:
                 db_rows = db.query(Experience).filter(
-                    Experience.user_id == user_id,
                     Experience.status == ExperienceStatus.active,
                     or_(*conditions),
                 ).order_by(desc(Experience.last_accessed)).limit(top_k * 2).all()
@@ -304,6 +306,7 @@ async def search_relevant(
                         "_recency": recency,
                         "_access": access_score,
                         "_exp_id": row.id,
+                        "_tags": row.tags or [],
                     })
     finally:
         db.close()
@@ -316,6 +319,7 @@ async def search_relevant(
         r["_sim"] = 1.0  # vector hits get base similarity score
         r["_recency"] = 0.5
         r["_access"] = 0.0
+        r["_tags"] = []
         merged[key] = r
 
     for r in db_results:
@@ -336,6 +340,12 @@ async def search_relevant(
         exp_id = r.get("_exp_id")
         if exp_id:
             _bump_access(exp_id)
+
+        # Filter by tag if category specified (exact match on tags JSON array)
+        if category:
+            item_tags = r.get("_tags", [])
+            if category not in item_tags:
+                continue
 
         # Clean internal keys
         out = {"text": r["text"], "source": r.get("source", "历史经验")}
@@ -415,11 +425,6 @@ async def extract_and_save(
             db.add(exp)
             db.commit()
             db.refresh(exp)
-
-            try:
-                await _index_experience_to_rag(exp)
-            except Exception as e:
-                logger.warning(f"[Experience:Vector] Index warning for exp_{exp.id}: {e}")
 
             saved_count += 1
     except Exception as e:
@@ -516,11 +521,10 @@ def delete_experience(exp_id: int) -> bool:
         exp = db.query(Experience).filter(Experience.id == exp_id).first()
         if not exp:
             return False
-        user_id = exp.user_id
         db.delete(exp)
         db.commit()
         try:
-            asyncio.ensure_future(_remove_experience_from_rag(exp_id, user_id))
+            asyncio.ensure_future(_remove_experience_from_rag(exp_id))
         except RuntimeError:
             pass  # no event loop running
         return True

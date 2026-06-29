@@ -10,9 +10,8 @@ RUN npm run build
 FROM python:3.12-slim
 WORKDIR /app
 
-RUN sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list.d/*.sources 2>/dev/null || true; \
-    sed -i 's|http://deb.debian.org|http://mirrors.aliyun.com|g' /etc/apt/sources.list 2>/dev/null || true
-RUN apt-get update && \
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources && \
+    apt-get update && \
     apt-get install -y --no-install-recommends \
         libreoffice-core \
         libreoffice-writer \
@@ -21,11 +20,8 @@ RUN apt-get update && \
         libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# 若需图表中文渲染，在目标服务器执行：
-# docker exec <container> apt-get update && apt-get install -y fonts-noto-cjk
-
 COPY backend/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -i https://pypi.tuna.tsinghua.edu.cn/simple -r /tmp/requirements.txt
+RUN pip install --no-cache-dir --default-timeout=120 --retries 5 -i https://pypi.tuna.tsinghua.edu.cn/simple -r /tmp/requirements.txt
 
 # Pre-download tiktoken encodings for offline deployment
 ENV TIKTOKEN_CACHE_DIR=/app/.tiktoken_cache
@@ -33,10 +29,11 @@ RUN python -m lightrag.tools.download_cache --cache-dir /app/.tiktoken_cache
 
 COPY backend/ /app/backend/
 COPY --from=frontend-builder /build/frontend/dist /app/frontend/dist
-RUN mkdir -p /app/uploads /app/opinions /app/talk /app/logs
+RUN mkdir -p /app/uploads /app/opinions /app/talk /app/logs /app/downloads
 
 ENV UPLOAD_DIR=/app/uploads
 ENV LOG_DIR=/app/logs
+ENV DOWNLOAD_DIR=/app/downloads
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000

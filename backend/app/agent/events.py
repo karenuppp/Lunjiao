@@ -94,6 +94,15 @@ class ErrorEvent(AgentEvent):
 
 
 @dataclass
+class SkillInvokedEvent(AgentEvent):
+    """Skill script generated a downloadable file."""
+    event_type: str = "skill_invoked"
+    skill_name: str = ""
+    download_id: str = ""
+    filename: str = ""
+
+
+@dataclass
 class ExperienceSuggestEvent(AgentEvent):
     event_type: str = "experience_suggest"
     topic: str = ""

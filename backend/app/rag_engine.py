@@ -552,11 +552,20 @@ class RAGEngineAdapter:
             return []
 
         cat_map = self._build_category_map()
+        # LightRAG's normalize_document_file_path stores basename, but
+        # cat_map keys are absolute paths. Build basename fallback map.
+        basename_map: dict[str, str] = {}
+        for fp_abs, fp_cat in cat_map.items():
+            bn = Path(fp_abs).name
+            if bn not in basename_map:
+                basename_map[bn] = fp_cat
 
         matched = []
         for c in chunks:
             fp = c.get("file_path", "")
             chunk_cat = cat_map.get(fp, "")
+            if not chunk_cat:
+                chunk_cat = basename_map.get(Path(fp).name, "")
             if chunk_cat == category:
                 matched.append(c)
 
