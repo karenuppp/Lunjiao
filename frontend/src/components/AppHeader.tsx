@@ -272,6 +272,17 @@ export default function AppHeader({
       >
         <div style={{ marginTop: 8, maxHeight: 460, overflowY: 'auto', lineHeight: 1.8, fontSize: 14 }}>
           <div style={{ marginBottom: 16 }}>
+            <div style={{ fontWeight: 700, color: '#4F46E5', marginBottom: 4, fontSize: 15 }}>v0.11</div>
+            <div style={{ fontWeight: 600, color: '#1a1b2e', marginBottom: 6 }}>2026-06-29</div>
+            <ul style={{ margin: 0, paddingLeft: 20, color: '#4b5563' }}>
+              <li>新增对话页对话时间显示</li>
+              <li>新增历史对话重命名和删除功能</li>
+              <li>新增公文格式技能，使用关键词即可调用，自动生成标准排版 Word 文档</li>
+              <li>修复上传文件时间显示错误的问题</li>
+            </ul>
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
             <div style={{ fontWeight: 700, color: '#4F46E5', marginBottom: 4, fontSize: 15 }}>v0.8</div>
             <div style={{ fontWeight: 600, color: '#1a1b2e', marginBottom: 6 }}>2026-06-15</div>
             <ul style={{ margin: 0, paddingLeft: 20, color: '#4b5563' }}>
